@@ -49,4 +49,26 @@ namespace Events
         public RoadBuilt(string a, string b, List<Vector2> path)
         { A = a; B = b; Path = path; }
     }
+
+    public readonly struct CityCaptured
+    {
+        public readonly string Id, Name;
+        public readonly int fuel, meds, ammo;
+        public CityCaptured(string id, string name, int fuel, int meds, int ammo)
+        { Id = id; Name = name; this.fuel = fuel; this.meds = meds; this.ammo = ammo; }
+    }
+
+    public readonly struct CampDestroyed
+    {
+        public readonly string Id, Name;
+        public readonly int fuel, meds, ammo;
+        public CampDestroyed(string id, string name, int fuel, int meds, int ammo)
+        { Id = id; Name = name; this.fuel = fuel; this.meds = meds; this.ammo = ammo; }
+    }
+
+    public readonly struct NodeRemoved
+    {
+        public readonly string Id;
+        public NodeRemoved(string id) { Id = id; }
+    }
 }

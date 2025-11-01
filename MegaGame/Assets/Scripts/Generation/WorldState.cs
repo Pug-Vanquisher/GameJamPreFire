@@ -8,10 +8,9 @@ public class WorldState : MonoBehaviour
     public float MapHalfSize { get; private set; }
 
     public class RegionSeed { public int Id; public Vector2 Pos; }
-    public List<RegionSeed> Regions = new(); // seeds
+    public List<RegionSeed> Regions = new(); 
     public int GetRegionId(Vector2 p, out float d1, out float d2)
     {
-        // возвращает id ближайшего региона
         int best = -1, second = -1; d1 = float.MaxValue; d2 = float.MaxValue;
         for (int i = 0; i < Regions.Count; i++)
         {
@@ -25,17 +24,22 @@ public class WorldState : MonoBehaviour
     public int GetRegionId(Vector2 p) { float a, b; return GetRegionId(p, out a, out b); }
 
     public BiomeBank Biomes { get; private set; }
-    public float BiomeFrequency { get; private set; }
+
+    float f1, f2, blend;
+    Vector2 off1, off2;
+    public float SampleBiomeRaw(Vector2 p)
+    {
+        float n1 = Mathf.PerlinNoise((p.x + MapHalfSize + off1.x) * f1,
+                                     (p.y + MapHalfSize + off1.y) * f1);
+        float n2 = Mathf.PerlinNoise((p.x + MapHalfSize + off2.x) * f2,
+                                     (p.y + MapHalfSize + off2.y) * f2);
+        return Mathf.Clamp01(Mathf.Lerp(n1, n2, blend));
+    }
+
     public Biome SampleBiome(Vector2 p)
     {
         if (!Biomes) return Biome.Plains;
         return Biomes.Evaluate(SampleBiomeRaw(p));
-    }
-    public float SampleBiomeRaw(Vector2 p)
-    {
-        float nx = (p.x + MapHalfSize) * BiomeFrequency;
-        float ny = (p.y + MapHalfSize) * BiomeFrequency;
-        return Mathf.PerlinNoise(nx, ny);
     }
 
     public NodeData Capital { get; private set; }
@@ -59,8 +63,19 @@ public class WorldState : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    public void InitGlobals(float half, BiomeBank biomes, float biomeFreq)
-    { MapHalfSize = half; Biomes = biomes; BiomeFrequency = biomeFreq; }
+    public void InitGlobals(float half, BiomeBank biomes, float freq1, float freq2, float mix, int seed)
+    {
+        MapHalfSize = half;
+        Biomes = biomes;
+        f1 = Mathf.Max(1e-6f, freq1);
+        f2 = Mathf.Max(1e-6f, freq2);
+        blend = Mathf.Clamp01(mix);
+
+        // оффсеты
+        var rng = new System.Random(seed);
+        off1 = new Vector2((float)rng.NextDouble() * 1000f, (float)rng.NextDouble() * 1000f);
+        off2 = new Vector2((float)rng.NextDouble() * 1000f, (float)rng.NextDouble() * 1000f);
+    }
 
     public void SetCapital(NodeData node) => Capital = node;
     public void SetPlayerBase(NodeData node, Vector2 spawn) { PlayerBase = node; PlayerSpawn = spawn; }
@@ -72,6 +87,25 @@ public class WorldState : MonoBehaviour
         float deg = (Mathf.Atan2(v.y, v.x) * Mathf.Rad2Deg + 360f) % 360f;
         string[] dirs = { "восток", "северо-восток", "север", "северо-запад", "запад", "юго-запад", "юг", "юго-восток" };
         return dirs[Mathf.RoundToInt(deg / 45f) % 8];
+    }
+
+    public NodeData FindCityById(string id) => Cities.Find(n => n.Id == id);
+    public NodeData FindCampById(string id) => Camps.Find(n => n.Id == id);
+    public NodeData FindNearestNode(Vector2 pos, float maxDist, out bool isCamp)
+    {
+        isCamp = false;
+        NodeData best = null; float bestD2 = maxDist * maxDist;
+        foreach (var n in Cities)
+        {
+            float d2 = (n.Pos - pos).sqrMagnitude;
+            if (d2 < bestD2) { bestD2 = d2; best = n; isCamp = false; }
+        }
+        foreach (var n in Camps)
+        {
+            float d2 = (n.Pos - pos).sqrMagnitude;
+            if (d2 < bestD2) { bestD2 = d2; best = n; isCamp = true; }
+        }
+        return best;
     }
 }
 
@@ -87,17 +121,19 @@ public class NodeData
     public string Terrain;
     public bool IsCapital;
 
+    public bool IsCaptured;  
+    public bool IsDestroyed;  
+    public int Garrison;     
+
+    public int Fuel;
+    public int Meds;
+    public int Ammo;
+
     public NodeData(string id, string name, NodeType type, Faction faction,
                     Vector2 pos, int regionId, string terrain, bool isCapital = false)
     {
-        Id = id;
-        Name = name;
-        Type = type;
-        Faction = faction;
-        Pos = pos;
-        RegionId = regionId;
-        Terrain = terrain;
-        IsCapital = isCapital;
+        Id = id; Name = name; Type = type; Faction = faction;
+        Pos = pos; RegionId = regionId; Terrain = terrain; IsCapital = isCapital;
     }
 }
 

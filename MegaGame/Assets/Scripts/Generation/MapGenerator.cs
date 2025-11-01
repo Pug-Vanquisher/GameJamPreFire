@@ -25,7 +25,14 @@ public class MapGenerator : MonoBehaviour
 
         world = WorldState.Instance ?? new GameObject("[WorldState]").AddComponent<WorldState>();
         world.Cities.Clear(); world.Camps.Clear(); world.EnemySquads.Clear(); world.Roads.Clear(); world.Regions.Clear();
-        world.InitGlobals(config.mapHalfSize, biomes, config.biomeFrequency);
+        world.InitGlobals(
+    config.mapHalfSize,
+    biomes,
+    config.biomeFrequency,
+    config.biomeFrequency2,
+    config.biomeBlend,
+    config.biomeDetailSeed
+);
 
         var used = new List<Vector2>();
         for (int i = 0; i < config.regionSeeds; i++)
@@ -50,6 +57,14 @@ public class MapGenerator : MonoBehaviour
             if (!TryPlaceNode(out var pos, out var regionId, out var biomeKey, true)) { i--; continue; }
             string name = names ? names.PickCityName(rng) : $"Город {i + 1}";
             var node = new NodeData($"city_{i}", name, NodeType.City, Faction.Neutral, pos, regionId, biomeKey);
+            node.IsCaptured = false;
+            node.IsDestroyed = false;
+            node.Garrison = Random.Range(3, 7);
+
+            // ресурсы
+            node.Fuel = Mathf.Clamp(rng.Next(config.fuelRange.x, config.fuelRange.y + 1), 1, int.MaxValue);
+            node.Meds = Mathf.Clamp(rng.Next(config.medsRange.x, config.medsRange.y + 1), 0, int.MaxValue);
+            node.Ammo = Mathf.Clamp(rng.Next(config.ammoRange.x, config.ammoRange.y + 1), 0, int.MaxValue);
             world.Cities.Add(node); used.Add(pos);
             EventBus.Publish(new NodeSpawned(node.Id, node.Name, node.Pos, node.RegionId, node.Type));
         }
@@ -60,6 +75,14 @@ public class MapGenerator : MonoBehaviour
             if (!TryPlaceNode(out var pos, out var regionId, out var biomeKey, false)) { i--; continue; }
             string name = names ? names.PickCampName(rng) : $"Лагерь {i + 1}";
             var node = new NodeData($"camp_{i}", name, NodeType.Camp, Faction.Enemy, pos, regionId, biomeKey);
+            node.IsCaptured = false;
+            node.IsDestroyed = false;
+            node.Garrison = Random.Range(3, 7);
+
+            // ресурсы
+            node.Fuel = Mathf.Clamp(rng.Next(config.fuelRange.x, config.fuelRange.y + 1), 1, int.MaxValue);
+            node.Meds = Mathf.Clamp(rng.Next(config.medsRange.x, config.medsRange.y + 1), 0, int.MaxValue);
+            node.Ammo = Mathf.Clamp(rng.Next(config.ammoRange.x, config.ammoRange.y + 1), 0, int.MaxValue);
             world.Camps.Add(node);
             EventBus.Publish(new NodeSpawned(node.Id, node.Name, node.Pos, node.RegionId, node.Type));
         }
@@ -81,7 +104,7 @@ public class MapGenerator : MonoBehaviour
 
             var baseNode = new NodeData("player_base", "База", NodeType.Base, Faction.Player,
                                         basePos, world.GetRegionId(basePos), world.SampleBiome(basePos).ToString());
-            world.SetPlayerBase(baseNode, basePos + dir * config.spawnOffset);
+            world.SetPlayerBase(baseNode, basePos);
             EventBus.Publish(new NodeSpawned(baseNode.Id, baseNode.Name, baseNode.Pos, baseNode.RegionId, baseNode.Type));
         }
 
@@ -214,7 +237,7 @@ public class MapGenerator : MonoBehaviour
         var mst = BuildMST(nodes.Count, candidateEdges);
         foreach (var e in mst) AddRoadEdge(nodes[e.a], nodes[e.b]);
 
-        // 3) Доп. соединения для живости
+        // Доп соединения
         for (int i = 0; i < config.extraConnections; i++)
         {
             var extra = PickExtraEdge(nodes, mst, candidateEdges);

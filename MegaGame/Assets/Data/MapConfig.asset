@@ -13,24 +13,29 @@ MonoBehaviour:
   m_Name: MapConfig
   m_EditorClassIdentifier: 
   mapHalfSize: 8000
-  regionSeeds: 28
-  regionSeedMinSpacing: 1200
+  regionSeeds: 15
+  regionSeedMinSpacing: 2000
   regionSafeMargin: 600
-  biomeFrequency: 0.001
-  biomeNoiseEpsilon: 0.03
+  biomeFrequency: 0.0004
+  biomeFrequency2: 0.0008
+  biomeBlend: 0.379
+  biomeDetailSeed: 1337
+  biomeNoiseEpsilon: 0.0357
   biomeProbeRadius: 120
-  citiesCount: 16
+  citiesCount: 14
   campsCount: 8
-  minNodeSpacing: 650
+  minNodeSpacing: 2400
   capitalSafeRadius: 1400
-  playerBaseDistanceFromCapital: 1100
-  spawnOffset: 150
+  playerBaseDistanceFromCapital: 5000
   enemySquads: 6
   squadStrengthRange: {x: 3, y: 7}
   roadKNearest: 3
-  extraConnections: 4
+  extraConnections: 8
   roadSegments: 24
-  roadCurviness: 0.25
-  roadFrequency: 1.7
+  roadCurviness: 0.05
+  roadFrequency: 1.75
   seed: 12345
   useSystemTimeSeed: 1
+  fuelRange: {x: 5, y: 20}
+  medsRange: {x: 0, y: 8}
+  ammoRange: {x: 0, y: 12}
