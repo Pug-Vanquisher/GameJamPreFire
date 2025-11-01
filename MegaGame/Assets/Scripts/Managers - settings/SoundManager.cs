@@ -1,4 +1,5 @@
 using UnityEngine;
+using Events; // <-- EventBus
 
 public class SoundManager : MonoBehaviour
 {
@@ -16,20 +17,23 @@ public class SoundManager : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
-            //DontDestroyOnLoad(gameObject);
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
             Destroy(gameObject);
+            return;
         }
 
-        EventManager.Instance.Subscribe("VolumeChanged", MusicVolume);
+        EventBus.Subscribe<GlobalVolumeChanged>(OnAnyVolumeChanged);
+        EventBus.Subscribe<MusicVolumeChanged>(OnAnyVolumeChanged);
     }
 
     public void PlaySound(int index)
     {
         if (!IsValidIndex(index)) return;
 
+        // SFX/UI используют глобальную громкость
         float finalVolume = volumes[index] * AudioSettingsManager.GlobalVolume;
         audioSource.PlayOneShot(sounds[index], finalVolume);
     }
@@ -46,15 +50,18 @@ public class SoundManager : MonoBehaviour
             currentMusicIndex = index;
         }
 
-        MusicVolume();
+        ApplyMusicVolume();
     }
 
-    private void MusicVolume()
+    private void OnAnyVolumeChanged(GlobalVolumeChanged _) => ApplyMusicVolume();
+    private void OnAnyVolumeChanged(MusicVolumeChanged _) => ApplyMusicVolume();
+
+    private void ApplyMusicVolume()
     {
         if (currentMusicIndex >= 0 && currentMusicIndex < volumes.Length)
         {
-            musicSource.volume = volumes[currentMusicIndex] * AudioSettingsManager.GlobalVolume;
-            Debug.Log("звук должен измениться");
+            // Музыка использует ТОЛЬКО MusicVolume (по твоему ТЗ)
+            musicSource.volume = volumes[currentMusicIndex] * AudioSettingsManager.MusicVolume;
         }
     }
 
@@ -70,6 +77,7 @@ public class SoundManager : MonoBehaviour
 
     private void OnDestroy()
     {
-        EventManager.Instance.Unsubscribe("VolumeChanged", MusicVolume);
+        EventBus.Unsubscribe<GlobalVolumeChanged>(OnAnyVolumeChanged);
+        EventBus.Unsubscribe<MusicVolumeChanged>(OnAnyVolumeChanged);
     }
 }

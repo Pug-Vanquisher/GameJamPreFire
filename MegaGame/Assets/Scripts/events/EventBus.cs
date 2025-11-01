@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Localization;
 
 namespace Events
 {
@@ -88,6 +89,31 @@ namespace Events
             var type = typeof(T);
             return _subscribers.TryGetValue(type, out var list) && list.Count > 0;
         }
+    }
 
+    /// Срабатывает при изменении глобальной громкости (SFX/UI)
+    public readonly struct GlobalVolumeChanged
+    {
+        public readonly float Value;
+        public GlobalVolumeChanged(float value) => Value = value;
+    }
+
+    /// Срабатывает при изменении громкости музыки
+    public readonly struct MusicVolumeChanged
+    {
+        public readonly float Value;
+        public MusicVolumeChanged(float value) => Value = value;
+    }
+
+    /// Сообщает всем подписчикам, что язык изменился.
+    public readonly struct LanguageChanged
+    {
+        public readonly string Code;   // "en", "ru", ...
+        public readonly Locale Locale; // сам Locale на случай продвинутого использования
+        public LanguageChanged(string code, Locale locale)
+        {
+            Code = code;
+            Locale = locale;
+        }
     }
 }
