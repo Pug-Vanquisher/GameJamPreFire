@@ -36,6 +36,14 @@ public static class PlayerInventory
         Debug.Log($"[PlayerInventory] +Fuel:{fuel} +HP:{meds} +Ammo:{ammo} => Fuel:{Fuel} HP:{Health} Ammo:{Ammo}");
     }
 
+    public static int SpendAmmo(int count)
+    {
+        if (count <= 0) return 0;
+        int taken = Mathf.Min(Ammo, count);
+        Ammo -= taken;
+        return taken;
+    }
+
     public static void Damage(int dmg) => Health = Mathf.Max(0, Health - Mathf.Abs(dmg));
 
     public static float ConsumeFuelByDistance(float distance)

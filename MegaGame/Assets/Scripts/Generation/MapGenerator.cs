@@ -311,7 +311,9 @@ public class MapGenerator : MonoBehaviour
     private void AddRoadEdge(NodeData A, NodeData B)
     {
         var path = MakeCurvyPolyline(A.Pos, B.Pos, config.roadSegments, config.roadCurviness, config.roadFrequency);
-        world.Roads.Add(new WorldState.RoadEdge { A = A.Id, B = B.Id, Path = path });
+        var edge = new WorldState.RoadEdge { Id = world.Roads.Count, A = A.Id, B = B.Id, Path = path };
+        world.Roads.Add(edge);
+
         EventBus.Publish(new RoadBuilt(A.Id, B.Id, path));
     }
 

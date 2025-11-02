@@ -1,7 +1,11 @@
+using Events;
 using UnityEngine;
 
 public class DebugHotkeys : MonoBehaviour
 {
+    string id = "1";
+    string name = "Pidor";
+    int defaultNmb = 1;
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.F1))
@@ -12,6 +16,7 @@ public class DebugHotkeys : MonoBehaviour
                 $"HP:{PlayerInventory.Health}/{PlayerInventory.MaxHealth}  " +
                 $"Ammo:{PlayerInventory.Ammo}/{PlayerInventory.MaxAmmo}"
             );
+            EventBus.Publish(new CityCaptured(id, name, defaultNmb, defaultNmb, defaultNmb));
         }
     }
 }

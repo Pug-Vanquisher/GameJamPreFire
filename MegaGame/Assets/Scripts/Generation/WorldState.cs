@@ -51,6 +51,7 @@ public class WorldState : MonoBehaviour
 
     public class RoadEdge
     {
+        public int Id;
         public string A, B;            
         public List<Vector2> Path;     
     }
