@@ -110,6 +110,9 @@ public class WorldState : MonoBehaviour
     }
 }
 
+public enum EnemyPersonality { Cowardly, Neutral, Aggressive }
+public enum AIState { Idle, Patrol, Engage, Pursue, Return }
+
 [System.Serializable]
 public class NodeData
 {
@@ -142,15 +145,30 @@ public class NodeData
 public class SquadData
 {
     public string Id;
+    public string Callsign;                // Новый: уникальное имя
+    public EnemyPersonality Persona;       // Новый: характер
+    public bool IsGarrison;                // Новый: стоит у узла/не ходит по карте
+    public string AnchorNodeId;            // Новый: узел гарнизона (если IsGarrison)
+
     public Vector2 Pos;
     public int RegionId;
     public int Strength;
 
+    public float Speed = 250f;             // юн/с
+    public float DetectionRadius = 1500f;  // должен совпадать с радиусом радара игрока
+    public float Firepower = 1f;           // множитель урона от характера
+
+    // Текущее ИИ-состояние:
+    public AIState State = AIState.Patrol; // патруль по умолчанию
+    public string TargetNodeId;            // цель патруля
+    public List<Vector2> Path;             // текущий путь (по дорогам/вне дорог)
+    public int PathIndex;                  // индекс точки в Path
+    public float ReconsiderAt;             // время следующего пересмотра планов
+    public float PursueUntil;              // до какого времени преследовать
+    public bool InCombat;                  // флажок боя (заглушка)
+
     public SquadData(string id, Vector2 pos, int regionId, int strength)
     {
-        Id = id;
-        Pos = pos;
-        RegionId = regionId;
-        Strength = strength;
+        Id = id; Pos = pos; RegionId = regionId; Strength = strength;
     }
 }

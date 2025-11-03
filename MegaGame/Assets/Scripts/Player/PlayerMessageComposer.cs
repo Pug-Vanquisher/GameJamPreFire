@@ -11,13 +11,28 @@ public class PlayerMessageComposer : MonoBehaviour
         EventBus.Subscribe<CityCaptured>(OnCityCaptured);
         EventBus.Subscribe<PlayerScanReport>(OnPlayerScanReport);
         EventBus.Subscribe<PlayerDiagnosticsReport>(OnPlayerDiagnosticsReport);
+        EventBus.Subscribe<CampDestroyed>(OnCampDestroyed);       
     }
-
     void OnDisable()
     {
         EventBus.Unsubscribe<CityCaptured>(OnCityCaptured);
         EventBus.Unsubscribe<PlayerScanReport>(OnPlayerScanReport);
         EventBus.Unsubscribe<PlayerDiagnosticsReport>(OnPlayerDiagnosticsReport);
+        EventBus.Unsubscribe<CampDestroyed>(OnCampDestroyed);        
+    }
+    void OnCampDestroyed(CampDestroyed e)
+    {
+        if (!phrases)
+        {
+            Debug.LogWarning("[PlayerMessageComposer] PhraseBank is missing");
+            return;
+        }
+
+        string tpl = phrases.Pick(phrases.destroyCampPlayer);
+        string msg = string.IsNullOrEmpty(tpl) ? $"Лагерь {e.Name} уничтожен."
+                                               : tpl.Replace("{camp}", e.Name);
+
+        EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, msg));
     }
 
     void OnCityCaptured(CityCaptured e)

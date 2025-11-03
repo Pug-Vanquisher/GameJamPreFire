@@ -11,11 +11,14 @@ public class RadarRenderer : MonoBehaviour
     [SerializeField] private Image cityDotPrefab;
     [SerializeField] private Image campDotPrefab;
     [SerializeField] private Image baseDotPrefab;
+    [SerializeField] private Image enemyDotPrefab;
 
     [Header("Radar settings")]
     [SerializeField] private float radarRange = 1200f; 
     [SerializeField] private int texW = 128;
     [SerializeField] private int texH = 128;
+    [SerializeField] private float refreshHz = 5f; // периодич. автообновление
+    float _accum;
 
     [Header("Colors")]
     [SerializeField] private Color bgColor = new Color(0.05f, 0.06f, 0.07f, 1f);
@@ -33,6 +36,8 @@ public class RadarRenderer : MonoBehaviour
         EventBus.Subscribe<MapGenerated>(OnMapGenerated);
         EventBus.Subscribe<RoadBuilt>(OnRoadBuilt);
         EventBus.Subscribe<NodeSpawned>(OnNodeSpawned);
+        EventBus.Subscribe<SquadSpawned>(OnSquadSpawned);
+        EventBus.Subscribe<SquadDied>(OnSquadDied);
     }
     void OnDisable()
     {
@@ -40,6 +45,8 @@ public class RadarRenderer : MonoBehaviour
         EventBus.Unsubscribe<MapGenerated>(OnMapGenerated);
         EventBus.Unsubscribe<RoadBuilt>(OnRoadBuilt);
         EventBus.Unsubscribe<NodeSpawned>(OnNodeSpawned);
+        EventBus.Unsubscribe<SquadSpawned>(OnSquadSpawned);
+        EventBus.Unsubscribe<SquadDied>(OnSquadDied);
     }
 
     void Start()
@@ -47,6 +54,17 @@ public class RadarRenderer : MonoBehaviour
         EnsureTexture();
         RefreshAll();
     }
+
+    void Update()
+    {
+        _accum += Time.deltaTime * refreshHz;
+        if (_accum >= 1f)
+        {
+            _accum -= 1f;
+            RefreshAll();
+        }
+    }
+
 
     void EnsureTexture()
     {
@@ -61,6 +79,8 @@ public class RadarRenderer : MonoBehaviour
     void OnRoadBuilt(RoadBuilt _) => RefreshAll();
     void OnNodeSpawned(NodeSpawned _) => RefreshAll();
     void OnPlayerMoved(PlayerMoved _) => RefreshAll();
+    void OnSquadSpawned(SquadSpawned e) => RefreshAll();
+    void OnSquadDied(SquadDied e) => RefreshAll();
 
     void RefreshAll()
     {
@@ -80,6 +100,8 @@ public class RadarRenderer : MonoBehaviour
         TryDot(ws.Capital?.Pos ?? Vector2.zero, baseDotPrefab, center);
         foreach (var c in ws.Cities) TryDot(c.Pos, cityDotPrefab, center);
         foreach (var k in ws.Camps) TryDot(k.Pos, campDotPrefab, center);
+        foreach (var s in ws.EnemySquads)
+            TryDot(s.Pos, enemyDotPrefab, center);
     }
 
     void ClearTex(Color c)

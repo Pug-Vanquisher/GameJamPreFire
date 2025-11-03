@@ -27,8 +27,13 @@ MonoBehaviour:
   minNodeSpacing: 2400
   capitalSafeRadius: 1400
   playerBaseDistanceFromCapital: 5000
-  enemySquads: 6
-  squadStrengthRange: {x: 3, y: 7}
+  enemySquads: 15
+  cityGarrisonRange: {x: 3, y: 5}
+  campGarrisonRange: {x: 1, y: 3}
+  garrisonSpawnRadius: 100
+  garrisonMinSeparation: 35
+  enemyDetectionRadius: 700
+  enemySpeedRange: {x: 220, y: 280}
   roadKNearest: 3
   extraConnections: 8
   roadSegments: 24

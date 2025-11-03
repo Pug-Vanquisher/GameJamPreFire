@@ -8,6 +8,7 @@ public class MapGenerator : MonoBehaviour
     [SerializeField] private MapGenConfig config;
     [SerializeField] private NameBank names;
     [SerializeField] private BiomeBank biomes;
+    [SerializeField] private CallsignBank callsigns; 
 
     private System.Random rng;
     private WorldState world;
@@ -52,14 +53,18 @@ public class MapGenerator : MonoBehaviour
 
         // Города
         used.Clear(); used.Add(capital.Pos);
+        var usedCityNames = new HashSet<string>();
+        usedCityNames.Add("Столица"); // чтобы не повторилось
         for (int i = 0; i < config.citiesCount; i++)
         {
             if (!TryPlaceNode(out var pos, out var regionId, out var biomeKey, true)) { i--; continue; }
-            string name = names ? names.PickCityName(rng) : $"Город {i + 1}";
+            string name = names ? names.PickCityNameUnique(rng, usedCityNames) : $"Город-{rng.Next(1000, 9999)}";
             var node = new NodeData($"city_{i}", name, NodeType.City, Faction.Neutral, pos, regionId, biomeKey);
             node.IsCaptured = false;
             node.IsDestroyed = false;
-            node.Garrison = Random.Range(3, 7);
+
+            // количество отрядов-гарнизонников этого города
+            node.Garrison = Mathf.Clamp(rng.Next(config.cityGarrisonRange.x, config.cityGarrisonRange.y + 1), 0, 999);
 
             // ресурсы
             node.Fuel = Mathf.Clamp(rng.Next(config.fuelRange.x, config.fuelRange.y + 1), 1, int.MaxValue);
@@ -73,11 +78,13 @@ public class MapGenerator : MonoBehaviour
         for (int i = 0; i < config.campsCount; i++)
         {
             if (!TryPlaceNode(out var pos, out var regionId, out var biomeKey, false)) { i--; continue; }
-            string name = names ? names.PickCampName(rng) : $"Лагерь {i + 1}";
+            string name = names ? names.PickCampName(rng) : $"Застава {i + 1}";
             var node = new NodeData($"camp_{i}", name, NodeType.Camp, Faction.Enemy, pos, regionId, biomeKey);
             node.IsCaptured = false;
             node.IsDestroyed = false;
-            node.Garrison = Random.Range(3, 7);
+
+            // гарнизон лагеря
+            node.Garrison = Mathf.Clamp(rng.Next(config.campGarrisonRange.x, config.campGarrisonRange.y + 1), 0, 999);
 
             // ресурсы
             node.Fuel = Mathf.Clamp(rng.Next(config.fuelRange.x, config.fuelRange.y + 1), 1, int.MaxValue);
@@ -109,14 +116,144 @@ public class MapGenerator : MonoBehaviour
         }
 
         // Враги
-        for (int i = 0; i < config.enemySquads; i++)
         {
-            Vector2 pos = SamplePosFarFrom(capital.Pos, config.capitalSafeRadius * 1.6f, config.mapHalfSize);
-            int reg = world.GetRegionId(pos);
-            int str = Mathf.Clamp(rng.Next(config.squadStrengthRange.x, config.squadStrengthRange.y + 1), 1, 99);
-            var sq = new SquadData($"squad_{i}", pos, reg, str);
-            world.EnemySquads.Add(sq);
-            EventBus.Publish(new SquadSpawned(sq.Id, sq.Pos, sq.RegionId, sq.Strength));
+            var usedCallsigns = new HashSet<string>(); // чтобы мобильные позывные не повторялись между собой и с гарнизонами
+
+            EnemyPersonality PickPersona()
+            {
+                int r = rng.Next(100);
+                if (r < 30) return EnemyPersonality.Cowardly;
+                if (r < 70) return EnemyPersonality.Neutral;
+                return EnemyPersonality.Aggressive;
+            }
+
+            // ---------- ГАРНИЗОНЫ В ГОРОДАХ ----------
+            foreach (var city in world.Cities)
+            {
+                if (city.Garrison <= 0) continue;
+
+                int count = city.Garrison;
+                float R = config.garrisonSpawnRadius;
+                float sep = Mathf.Max(10f, config.garrisonMinSeparation);
+                float angleStep = 360f / Mathf.Max(1, count);
+
+                var usedNumbers = new HashSet<int>(); // 1..30 для City-XX
+
+                for (int k = 0; k < count; k++)
+                {
+                    int num = rng.Next(1, 31);
+                    int guard = 0;
+                    while (!usedNumbers.Add(num) && guard++ < 64) num = rng.Next(1, 31);
+                    string call = $"{city.Name}-{num}";
+                    usedCallsigns.Add(call);
+
+                    float ang = (angleStep * k + rng.Next(-10, 11)) * Mathf.Deg2Rad;
+                    Vector2 basePos = city.Pos + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * R;
+
+                    // раздвижка
+                    int repel = 0;
+                    while (repel++ < 30)
+                    {
+                        bool clash = false;
+                        foreach (var s in world.EnemySquads)
+                        {
+                            if (!s.IsGarrison || s.AnchorNodeId != city.Id) continue;
+                            if ((s.Pos - basePos).sqrMagnitude < sep * sep) { clash = true; break; }
+                        }
+                        if (!clash) break;
+                        basePos += Random.insideUnitCircle * 6f; // чуть-чуть джиттера
+                    }
+
+                    var sq = new SquadData($"g_{city.Id}_{k}", basePos, city.RegionId, 1);
+                    sq.IsGarrison = true;
+                    sq.AnchorNodeId = city.Id;
+                    sq.Persona = EnemyPersonality.Neutral;
+                    sq.Callsign = call; // ЧИСТЫЙ позывной
+                    sq.Firepower = 1.0f;
+                    sq.Speed = Mathf.Lerp(config.enemySpeedRange.x, config.enemySpeedRange.y, (float)rng.NextDouble());
+                    sq.DetectionRadius = config.enemyDetectionRadius;
+
+                    world.EnemySquads.Add(sq);
+                    EventBus.Publish(new SquadSpawned(sq.Id, sq.Pos, sq.RegionId, sq.Strength));
+                }
+            }
+
+            // ---------- ГАРНИЗОНЫ В ЛАГЕРЯХ ----------
+            foreach (var camp in world.Camps)
+            {
+                if (camp.Garrison <= 0) continue;
+
+                int count = camp.Garrison;
+                float R = config.garrisonSpawnRadius * 0.8f; // у лагеря можно компактнее
+                float sep = Mathf.Max(10f, config.garrisonMinSeparation);
+                float angleStep = 360f / Mathf.Max(1, count);
+
+                var usedNumbers = new HashSet<int>(); // 1..30 для Camp-XX
+
+                for (int k = 0; k < count; k++)
+                {
+                    int num = rng.Next(1, 31);
+                    int guard = 0;
+                    while (!usedNumbers.Add(num) && guard++ < 64) num = rng.Next(1, 31);
+                    string call = $"{camp.Name}-{num}";
+                    usedCallsigns.Add(call);
+
+                    float ang = (angleStep * k + rng.Next(-10, 11)) * Mathf.Deg2Rad;
+                    Vector2 basePos = camp.Pos + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * R;
+
+                    int repel = 0;
+                    while (repel++ < 30)
+                    {
+                        bool clash = false;
+                        foreach (var s in world.EnemySquads)
+                        {
+                            if (!s.IsGarrison || s.AnchorNodeId != camp.Id) continue;
+                            if ((s.Pos - basePos).sqrMagnitude < sep * sep) { clash = true; break; }
+                        }
+                        if (!clash) break;
+                        basePos += Random.insideUnitCircle * 6f;
+                    }
+
+                    var sq = new SquadData($"g_{camp.Id}_{k}", basePos, camp.RegionId, 1);
+                    sq.IsGarrison = true;
+                    sq.AnchorNodeId = camp.Id;
+                    sq.Persona = EnemyPersonality.Neutral;
+                    sq.Callsign = call;
+                    sq.Firepower = 1.0f;
+                    sq.Speed = Mathf.Lerp(config.enemySpeedRange.x, config.enemySpeedRange.y, (float)rng.NextDouble());
+                    sq.DetectionRadius = config.enemyDetectionRadius;
+
+                    world.EnemySquads.Add(sq);
+                    EventBus.Publish(new SquadSpawned(sq.Id, sq.Pos, sq.RegionId, sq.Strength));
+                }
+            }
+
+            // ---------- МОБИЛЬНЫЕ ОТРЯДЫ ----------
+            for (int m = 0; m < config.enemySquads; m++)
+            {
+                bool fromCity = rng.Next(100) < 70 || world.Camps.Count == 0 || world.Cities.Count == 0;
+                NodeData src = fromCity
+                    ? world.Cities[rng.Next(world.Cities.Count)]
+                    : world.Camps[rng.Next(world.Camps.Count)];
+
+                Vector2 pos = src.Pos + Random.insideUnitCircle * 50f;
+
+                var sq = new SquadData($"squad_{m}", pos, src.RegionId, 1); // Strength теперь не используем — 1
+                sq.Persona = PickPersona();
+
+                // ЧИСТЫЙ позывной из банка
+                if (callsigns != null) sq.Callsign = callsigns.TakeUnique(rng, usedCallsigns);
+                else { string tmp = $"Враг-{rng.Next(100, 999)}"; usedCallsigns.Add(tmp); sq.Callsign = tmp; }
+
+                sq.Firepower = (sq.Persona == EnemyPersonality.Cowardly) ? 0.8f :
+                               (sq.Persona == EnemyPersonality.Aggressive) ? 1.2f : 1.0f;
+
+                sq.Speed = Mathf.Lerp(config.enemySpeedRange.x, config.enemySpeedRange.y, (float)rng.NextDouble());
+                sq.DetectionRadius = config.enemyDetectionRadius;
+
+                world.EnemySquads.Add(sq);
+                EventBus.Publish(new SquadSpawned(sq.Id, sq.Pos, sq.RegionId, sq.Strength));
+            }
         }
 
         // Дороги

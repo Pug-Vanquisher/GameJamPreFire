@@ -9,6 +9,10 @@ public class WorldMapRenderer : MonoBehaviour
     [SerializeField] private RawImage mapImage;      
     [SerializeField] private RectTransform overlay; 
     [SerializeField] private Image playerMarker;
+    [SerializeField] private Image cityIconPrefab;
+    [SerializeField] private Image capitalIconPrefab;
+    [SerializeField] private Image enemyIconPrefab;
+    [SerializeField] private Image campIconPrefab;
 
     [Header("Texture")]
     [SerializeField] private int texWidth = 512;
@@ -60,16 +64,20 @@ public class WorldMapRenderer : MonoBehaviour
     [SerializeField] private Color hillsRingColor = new Color(0.35f, 0.25f, 0.12f, 0.55f);
     [SerializeField] private float hillsIsoA = 0.82f;
     [SerializeField] private float hillsIsoB = 0.90f;
-    [SerializeField] private float hillsBand = 0.012f;  
+    [SerializeField] private float hillsBand = 0.012f;
 
 
     [Header("Dev toggles")]
-    [SerializeField] private bool showCamps = false; 
+    [SerializeField] private bool debugRender = false;   // ЕДИНЫЙ флаг: враги + лагеря
     [SerializeField] private bool showBoundaries = true;
     [SerializeField] private bool showHatch = true;
 
     Texture2D tex;
     Color[] row;
+
+    readonly List<Image> overlayStatic = new();  // столица/города/лагеря
+    readonly List<Image> overlayDynamic = new(); // враги (мобильные)
+    int overlayStaticIdx, overlayDynamicIdx;
 
 
     void OnEnable()
@@ -78,6 +86,8 @@ public class WorldMapRenderer : MonoBehaviour
         EventBus.Subscribe<RoadBuilt>(OnRoadBuilt);
         EventBus.Subscribe<NodeSpawned>(OnNodeSpawned);
         EventBus.Subscribe<PlayerMoved>(OnPlayerMoved);
+        EventBus.Subscribe<SquadSpawned>(OnSquadSpawned);
+        EventBus.Subscribe<SquadDied>(OnSquadDied);
     }
     void OnDisable()
     {
@@ -85,6 +95,8 @@ public class WorldMapRenderer : MonoBehaviour
         EventBus.Unsubscribe<RoadBuilt>(OnRoadBuilt);
         EventBus.Unsubscribe<NodeSpawned>(OnNodeSpawned);
         EventBus.Unsubscribe<PlayerMoved>(OnPlayerMoved);
+        EventBus.Unsubscribe<SquadSpawned>(OnSquadSpawned);
+        EventBus.Unsubscribe<SquadDied>(OnSquadDied);
     }
 
     void Start()
@@ -108,6 +120,8 @@ public class WorldMapRenderer : MonoBehaviour
     void OnRoadBuilt(RoadBuilt _) => RebuildAll();
     void OnNodeSpawned(NodeSpawned _) => RebuildAll();
     void OnPlayerMoved(PlayerMoved _) => UpdatePlayerMarker();
+    void OnSquadSpawned(SquadSpawned e) => UpdateEnemiesOverlay();
+    void OnSquadDied(SquadDied e) => UpdateEnemiesOverlay();
 
     void RebuildAll()
     {
@@ -123,12 +137,46 @@ public class WorldMapRenderer : MonoBehaviour
         foreach (var r in ws.Roads)
             DrawPolyline(r.Path, roadColor, roadWidthPx);
 
-        if (ws.Capital != null) DrawNode(ws.Capital.Pos, capitalColor, nodeRadiusPx + 1);
-        if (ws.PlayerBase != null) DrawNode(ws.PlayerBase.Pos, baseColor, nodeRadiusPx + 1);
-        foreach (var c in ws.Cities) DrawNode(c.Pos, cityColor, nodeRadiusPx);
-        if (showCamps) foreach (var k in ws.Camps) DrawNode(k.Pos, campColor, nodeRadiusPx);
+        overlayStaticIdx = 0;
+        EnsureOverlayCapacity(overlayStatic, 64);
+
+        bool useCapitalIcon = capitalIconPrefab;
+        bool useCityIcon = cityIconPrefab;
+
+        if (ws.Capital != null)
+        {
+            if (useCapitalIcon) PlaceMarkerStatic(capitalIconPrefab, ws.Capital.Pos);
+            else DrawNode(ws.Capital.Pos, capitalColor, nodeRadiusPx + 1);
+        }
+
+        if (ws.PlayerBase != null)
+        {
+            // для базы пока оставим точку (можно тоже префабом при желании)
+            DrawNode(ws.PlayerBase.Pos, baseColor, nodeRadiusPx + 1);
+        }
+
+        foreach (var c in ws.Cities)
+        {
+            if (useCityIcon) PlaceMarkerStatic(cityIconPrefab, c.Pos);
+            else DrawNode(c.Pos, cityColor, nodeRadiusPx);
+        }
+
+        // Лагеря — ТОЛЬКО при debugRender
+        if (debugRender)
+        {
+            foreach (var k in ws.Camps)
+            {
+                if (campIconPrefab) PlaceMarkerStatic(campIconPrefab, k.Pos);
+                else DrawNode(k.Pos, campColor, nodeRadiusPx);
+            }
+        }
+
+        HideRest(overlayStatic, overlayStaticIdx);
 
         tex.Apply();
+
+        // ДИНАМИКА: враги (мобильные) — обновляем отдельно
+        UpdateEnemiesOverlay();
     }
 
     void UpdatePlayerMarker()
@@ -137,6 +185,32 @@ public class WorldMapRenderer : MonoBehaviour
         if (!ws || !playerMarker || !overlay) return;
         playerMarker.rectTransform.anchoredPosition =
             MapRenderUtils.WorldToOverlayAnchored(PlayerState.Pos, ws.MapHalfSize, overlay);
+    }
+
+    void UpdateEnemiesOverlay()
+    {
+        var ws = WorldState.Instance; if (!ws || !overlay) return;
+
+        overlayDynamicIdx = 0;
+        EnsureOverlayCapacity(overlayDynamic, 64);
+        HideRest(overlayDynamic, overlayDynamicIdx); // почистим начало
+
+        if (!debugRender || !enemyIconPrefab)
+        {
+            HideAll(overlayDynamic);
+            return;
+        }
+
+        foreach (var s in ws.EnemySquads)
+        {
+            if (s.IsGarrison) continue; // на мировой карте гарнизоны не показываем
+            var dot = GetFromPool(overlayDynamic, overlayDynamicIdx++, enemyIconPrefab);
+            dot.rectTransform.SetParent(overlay, false);
+            dot.rectTransform.anchoredPosition = MapRenderUtils.WorldToOverlayAnchored(s.Pos, ws.MapHalfSize, overlay);
+            dot.gameObject.SetActive(true);
+        }
+
+        HideRest(overlayDynamic, overlayDynamicIdx);
     }
 
     void BakeBiomes()
@@ -449,5 +523,56 @@ public class WorldMapRenderer : MonoBehaviour
         int h = Hash2D(x, y, 0x2F6E2B1);               
         float r = (h & 0x7fffffff) / 2147483647f;      
         return (r * 2f - 1f) * amplitude;           
+    }
+
+    void PlaceMarkerStatic(Image prefab, Vector2 worldPos)
+    {
+        var ws = WorldState.Instance; if (!ws || !overlay || !prefab) return;
+        var img = GetFromPool(overlayStatic, overlayStaticIdx++, prefab);
+        img.rectTransform.SetParent(overlay, false);
+        img.rectTransform.anchoredPosition = MapRenderUtils.WorldToOverlayAnchored(worldPos, ws.MapHalfSize, overlay);
+        img.gameObject.SetActive(true);
+    }
+
+    Image GetFromPool(List<Image> pool, int index, Image prefab)
+    {
+        if (index < pool.Count && pool[index] != null)
+        {
+            var it = pool[index];
+            it.sprite = prefab.sprite;
+            it.color = prefab.color;
+            it.rectTransform.sizeDelta = prefab.rectTransform.sizeDelta;
+            return it;
+        }
+        else
+        {
+            var created = Instantiate(prefab, overlay);
+            if (index >= pool.Count) pool.Add(created);
+            else pool[index] = created;
+            created.gameObject.SetActive(false);
+            return created;
+        }
+    }
+
+    void EnsureOverlayCapacity(List<Image> pool, int min)
+    {
+        while (pool.Count < min)
+        {
+            var go = new GameObject("marker", typeof(RectTransform), typeof(Image));
+            var img = go.GetComponent<Image>();
+            img.gameObject.SetActive(false);
+            pool.Add(img);
+        }
+    }
+
+    void HideAll(List<Image> pool)
+    {
+        foreach (var it in pool) if (it) it.gameObject.SetActive(false);
+    }
+
+    void HideRest(List<Image> pool, int used)
+    {
+        for (int i = used; i < pool.Count; i++)
+            if (pool[i]) pool[i].gameObject.SetActive(false);
     }
 }
