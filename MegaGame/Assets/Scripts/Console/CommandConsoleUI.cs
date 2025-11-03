@@ -355,9 +355,12 @@ public class CommandConsoleUI : MonoBehaviour
     int Dir8Index(Vector2 from, Vector2 to)
     {
         Vector2 d = to - from;
-        if (d.sqrMagnitude < 1e-6f) return 0; // север по умолчанию
-        float ang = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg; // 0° = восток
-        ang = (ang + 360f + 90f) % 360f; // 0° = север
+        if (d.sqrMagnitude < 1e-6f) return 0;
+
+        // 0° = север, 90° = восток, 180° = юг, 270° = запад
+        float ang = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg;
+        if (ang < 0f) ang += 360f;
+
         return Mathf.RoundToInt(ang / 45f) % 8;
     }
 }

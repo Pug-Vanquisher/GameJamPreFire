@@ -30,9 +30,18 @@ public class MapGenConfig : ScriptableObject
     [Header("База игрока / спавн")]
     public float playerBaseDistanceFromCapital = 1100f;
 
-    [Header("Враги")]
-    public int enemySquads = 6;
-    public Vector2Int squadStrengthRange = new Vector2Int(3, 7);
+    [Header("Враги (мобильные)")]
+    public int enemySquads = 6;                 // количество мобильных отрядов
+
+    [Header("Гарнизоны узлов")]
+    public Vector2Int cityGarrisonRange = new Vector2Int(2, 5);  // отрядов-гарнизонников на город
+    public Vector2Int campGarrisonRange = new Vector2Int(0, 3);  // отрядов-гарнизонников на лагерь
+    public float garrisonSpawnRadius = 120f;                      // радиус кольца вокруг узла
+    public float garrisonMinSeparation = 35f;                     // минимальная дистанция между отрядами гарнизона
+
+    [Header("Баланс врагов")]
+    public float enemyDetectionRadius = 1500f;   // радиус обнаружения/вступления в бой
+    public Vector2 enemySpeedRange = new Vector2(220f, 280f); // мин/макс скорость отрядов
 
     [Header("Дороги")]
     public int roadKNearest = 3;

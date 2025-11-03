@@ -26,12 +26,46 @@ public class NodeInteractionSystem : MonoBehaviour
         }
     }
 
+    void OnEnable()
+    {
+        EventBus.Subscribe<GarrisonCountChanged>(OnGarrisonChanged);
+    }
+    void OnDisable()
+    {
+        EventBus.Unsubscribe<GarrisonCountChanged>(OnGarrisonChanged);
+    }
+
+    void OnGarrisonChanged(GarrisonCountChanged e)
+    {
+        var ws = WorldState.Instance; if (!ws) return;
+
+        var city = ws.FindCityById(e.NodeId);
+        if (city != null)
+        {
+            Debug.Log($"[Garrison] {city.Name}: осталось защитников {e.Remaining}.");
+            if (e.Remaining <= 0) Debug.Log($"[Garrison] {city.Name}: гарнизон уничтожен — город можно захватить.");
+            return;
+        }
+
+        var camp = ws.FindCampById(e.NodeId);
+        if (camp != null)
+        {
+            Debug.Log($"[Garrison] {camp.Name}: осталось защитников {e.Remaining}.");
+            if (e.Remaining <= 0) Debug.Log($"[Garrison] {camp.Name}: гарнизон уничтожен — лагерь можно уничтожить.");
+        }
+    }
+
     void CaptureCity(WorldState ws, NodeData city)
     {
         if (city.IsCaptured) return;
 
-        int garrison = 0; // city.Garrison;
-        if (garrison > 0) { Debug.Log($"[City] {city.Name}: гарнизон ещё жив ({city.Garrison})."); return; }
+        // СЧИТАЕМ ЖИВЫЕ ГАРНИЗОННЫЕ ОТРЯДЫ У ЭТОГО ГОРОДА
+        int alive = ws.EnemySquads.FindAll(s => s.IsGarrison && s.AnchorNodeId == city.Id).Count;
+        if (alive > 0)
+        {
+            Debug.Log($"[City] {city.Name}: гарнизон ещё жив ({alive}). Захват невозможен.");
+            return;
+        }
 
         city.IsCaptured = true;
         city.Faction = Faction.Player;
@@ -48,16 +82,25 @@ public class NodeInteractionSystem : MonoBehaviour
     {
         if (camp.IsDestroyed) return;
 
-        int garrison = 0; // camp.Garrison;
-        if (garrison > 0) { Debug.Log($"[Camp] {camp.Name}: гарнизон ещё жив ({camp.Garrison})."); return; }
+        // Считаем ЖИВЫЕ гарнизонные отряды, привязанные к этому лагерю
+        int alive = ws.EnemySquads.FindAll(s => s.IsGarrison && s.AnchorNodeId == camp.Id).Count;
+        if (alive > 0)
+        {
+            Debug.Log($"[Camp] {camp.Name}: гарнизон ещё жив ({alive}). Уничтожение невозможно.");
+            return;
+        }
 
+        // Забираем ресурсы игроку
         int f = camp.Fuel, m = camp.Meds, a = camp.Ammo;
         PlayerInventory.Add(f, m, a);
 
+        // Помечаем лагерь уничтоженным и убираем из мира
         camp.IsDestroyed = true;
-
         ws.Camps.RemoveAll(n => n.Id == camp.Id);
+
         Debug.Log($"[Camp] Уничтожен: {camp.Name}. Получено: топливо {f}, мед {m}, патроны {a}");
+
+        // Отправляем событие для композера + сигнал нод-системе (радар/карта и т.п.)
         EventBus.Publish(new CampDestroyed(camp.Id, camp.Name, f, m, a));
         EventBus.Publish(new NodeRemoved(camp.Id));
     }

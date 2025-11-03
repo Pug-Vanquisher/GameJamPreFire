@@ -71,4 +71,26 @@ namespace Events
         public readonly string Id;
         public NodeRemoved(string id) { Id = id; }
     }
+
+    public readonly struct SquadDied
+    {
+        public readonly string SquadId;
+        public readonly string Callsign;
+        public readonly bool IsGarrison;
+        public readonly string AnchorNodeId; // дл€ гарнизонов Ц Id города
+        public readonly Vector2 Pos;
+
+        public SquadDied(string squadId, string callsign, bool isGarrison, string anchorNodeId, Vector2 pos)
+        {
+            SquadId = squadId; Callsign = callsign; IsGarrison = isGarrison; AnchorNodeId = anchorNodeId; Pos = pos;
+        }
+    }
+
+    public readonly struct GarrisonCountChanged
+    {
+        public readonly string NodeId;
+        public readonly int Remaining;
+        public GarrisonCountChanged(string nodeId, int remaining)
+        { NodeId = nodeId; Remaining = remaining; }
+    }
 }

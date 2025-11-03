@@ -46,6 +46,9 @@ public class PhraseBank : ScriptableObject
     public string[] ammoNamesUI = { "Боезапас" };
     public string[] fuelNamesUI = { "Топливо" };
 
+    [Header("Уничтожение лагеря (игрок) — подставляется {camp}")]
+    [TextArea] public string[] destroyCampPlayer = { "Лагерь {camp} уничтожен." };
+
     public string Pick(string[] arr) =>
         (arr == null || arr.Length == 0) ? "" : arr[Random.Range(0, arr.Length)];
 }
