@@ -40,24 +40,34 @@ public class CommandConsoleUI : MonoBehaviour
     private bool busy;
     private string busyTitle;
 
-
+    // локальный флаг, чтобы не слать лишние ивенты
+    private bool moveModeActive = false;
+    private void SetMoveMode(bool active)
+    {
+        if (moveModeActive == active) return;
+        moveModeActive = active;
+        EventBus.Publish(new ConsoleMoveModeChanged(active));
+    }
 
     void OnEnable()
     {
         EventBus.Subscribe<VisibleTargetsChanged>(OnVisibleTargetsChanged);
         EventBus.Subscribe<RunStarted>(OnRunStarted);
         if (screen) RenderMenu(Menu.Root);
+        SetMoveMode(false);
     }
     void OnDisable()
     {
         EventBus.Unsubscribe<VisibleTargetsChanged>(OnVisibleTargetsChanged);
         EventBus.Unsubscribe<RunStarted>(OnRunStarted);
+        SetMoveMode(false);
     }
 
     void OnRunStarted(RunStarted _)
     {
         stack.Clear();
         RenderMenu(Menu.Root);
+        SetMoveMode(false);
     }
 
     void Update()
@@ -98,7 +108,7 @@ public class CommandConsoleUI : MonoBehaviour
     public void PressDigit(int d)
     {
         var m = CurrentMenu;
-        if (d == 0) { if (m != Menu.Root) { stack.Pop(); RenderMenu(CurrentMenu); } return; }
+        if (d == 0) { if (m != Menu.Root) { stack.Pop(); RenderMenu(CurrentMenu); SetMoveMode(CurrentMenu == Menu.Move); } return; }
 
         switch (m)
         {
@@ -123,7 +133,7 @@ public class CommandConsoleUI : MonoBehaviour
             sb.AppendLine("[2] Бой >");
             sb.AppendLine("[3] Диагностика >");
             sb.AppendLine("[4] Движение >");
-            sb.AppendLine("[5] Задачи");                // <<< добавлено
+            sb.AppendLine("[5] Задачи");
             sb.AppendLine();
             sb.AppendLine("[9] Прокрутка логов ↑");
             sb.AppendLine("[6] Прокрутка логов ↓");
@@ -163,11 +173,11 @@ public class CommandConsoleUI : MonoBehaviour
     void HandleRoot(int d)
     {
         if (d == 1) { StartCommand("Осмотр", delayScan, DoScanNow); return; }
-        if (d == 2) { stack.Push(Menu.Combat); RenderMenu(Menu.Combat); return; }
-        if (d == 3) { stack.Push(Menu.Diagnostics); RenderMenu(Menu.Diagnostics); return; }
-        if (d == 4) { stack.Push(Menu.Move); RenderMenu(Menu.Move); return; }
+        if (d == 2) { stack.Push(Menu.Combat); RenderMenu(Menu.Combat); SetMoveMode(false); return; }
+        if (d == 3) { stack.Push(Menu.Diagnostics); RenderMenu(Menu.Diagnostics); SetMoveMode(false); return; }
+        if (d == 4) { stack.Push(Menu.Move); RenderMenu(Menu.Move); SetMoveMode(true); return; }
 
-        if (d == 5) { GameRunManager.Instance?.AnnounceObjectives(); return; }   // <<< добавлено
+        if (d == 5) { GameRunManager.Instance?.AnnounceObjectives(); return; }
 
         if (d == 9) { EventBus.Publish(new ConsoleScrollRequest(+1f)); return; }
         if (d == 6) { EventBus.Publish(new ConsoleScrollRequest(-1f)); return; }
@@ -180,6 +190,7 @@ public class CommandConsoleUI : MonoBehaviour
             BuildAttackTargetsFromRegistry();
             stack.Push(Menu.AttackList);
             RenderMenu(Menu.AttackList);
+            SetMoveMode(false);
             return;
         }
         if (d == 2)
@@ -190,6 +201,7 @@ public class CommandConsoleUI : MonoBehaviour
                 string msg = ok
                     ? $"Перезарядка: {PlayerWeaponState.InMag}/{PlayerWeaponState.MagSize}. Остаток боезапаса: {PlayerInventory.Ammo}"
                     : "Перезарядка невозможна: магазин полон или нет боеприпасов.";
+                SoundManager.Instance.PlaySound(4);
                 EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, msg));
             });
             return;
@@ -225,7 +237,7 @@ public class CommandConsoleUI : MonoBehaviour
 
     void HandleMoveMenu(int d)
     {
-        if (d == 0) { stack.Pop(); RenderMenu(CurrentMenu); }
+        if (d == 0) { stack.Pop(); RenderMenu(CurrentMenu); SetMoveMode(false); }
     }
 
     // ====== задержки команд ======
@@ -233,11 +245,13 @@ public class CommandConsoleUI : MonoBehaviour
     {
         if (busy)
         {
+            SoundManager.Instance.PlaySound(2);
             EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, $"Выполняется: {busyTitle}..."));
             return;
         }
         busy = true; busyTitle = title;
 
+        SoundManager.Instance.PlaySound(5);
         EventBus.Publish(new CommandExecutionStarted(title, delay));
         StartCoroutine(Delayed());
 
@@ -271,6 +285,7 @@ public class CommandConsoleUI : MonoBehaviour
 
         PlayerWeaponState.TrySpend(spentReq);
         EventBus.Publish(new PlayerFired(PlayerState.Pos));
+        SoundManager.Instance.PlaySound(0);
         EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
             $"Огонь по {t.label}: расход {spentReq}. {PlayerWeaponState.InMag}/{PlayerWeaponState.MagSize} в магазине."));
 
@@ -378,5 +393,14 @@ public class CommandConsoleUI : MonoBehaviour
         Vector2 d = to - from; if (d.sqrMagnitude < 1e-6f) return 0;
         float ang = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; if (ang < 0f) ang += 360f;
         return Mathf.RoundToInt(ang / 45f) & 7;
+    }
+}
+
+namespace Events
+{
+    public struct ConsoleMoveModeChanged
+    {
+        public bool Active;
+        public ConsoleMoveModeChanged(bool active) { Active = active; }
     }
 }

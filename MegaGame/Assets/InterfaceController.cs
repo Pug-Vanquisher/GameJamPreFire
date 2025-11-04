@@ -2,104 +2,172 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using Events;
+using DG.Tweening;
+using TMPro;
+
 public class InterfaceController : MonoBehaviour
 {
-
+    [Header("Refs")]
     [SerializeField] private CommandConsoleUI console;
 
     [SerializeField] private RawImage mapImage;
-
     [SerializeField] private MeshRenderer mapMesh;
     [SerializeField] private MeshRenderer logMesh;
     [SerializeField] private MeshRenderer actionMesh;
     [SerializeField] private MeshRenderer radarMesh;
 
     [SerializeField] private GameObject[] buttons;
+    [SerializeField] private Camera targetCamera; 
 
-    [SerializeField] private float buttonStroke;
-    [SerializeField] private float buttonSpeed;
+    [Header("Buttons FX")]
+    [SerializeField] private float buttonStroke = 0.01f;
+    [SerializeField] private float buttonSpeed = 12f;
 
-    [SerializeField] private Vector3 minCameraRotation;
-    [SerializeField] private Vector3 maxCameraRotation;
+    [Header("Head/cockpit look")]
+    [SerializeField] private Vector3 minCameraRotation = new Vector3(-3, -4, 0);
+    [SerializeField] private Vector3 maxCameraRotation = new Vector3(3, 4, 0);
+    [SerializeField] private float lookLerp = 5f;
 
+    [Header("Shake")]
+    [SerializeField] private string multProp = "_mult";
+    [SerializeField] private float baseLogMult = 0.001f;
+    [SerializeField] private float baseRadarMult = 0.028f;
+    [SerializeField] private float baseActionMult = 0.001f;
 
-    private int mouseInterracted;
+    [System.Serializable]
+    public struct ShakeProfile
+    {
+        public float duration;              
+        public Vector3 strength;            
+        public int vibrato;                 
+        [Range(0f, 180f)] public float randomness; // разброс
+        public bool fadeOut;                
+        [Header("шум")]
+        public float panelsPulse;          
+        public Ease panelsEase;             
+    }
 
-    [SerializeField] private float magnitudeMult;
-    [SerializeField] private float shakeCooldown;
-    private float _shakeCooldown;
-    private float magnitude;
+    [Header("Shake Profiles")]
+    [SerializeField]
+    private ShakeProfile onHit = new ShakeProfile
+    {
+        duration = 0.25f,
+        strength = new Vector3(0.05f, 0.02f, 0),
+        vibrato = 25,
+        randomness = 90,
+        fadeOut = true,
+        panelsPulse = 0.040f,
+        panelsEase = Ease.OutQuad
+    };
+    [SerializeField]
+    private ShakeProfile onShot = new ShakeProfile
+    {
+        duration = 0.12f,
+        strength = new Vector3(0.02f, 0.01f, 0),
+        vibrato = 20,
+        randomness = 120,
+        fadeOut = true,
+        panelsPulse = 0.020f,
+        panelsEase = Ease.OutQuad
+    };
 
-    private int activeLeg;
+    [Header("Shake Control")]
+    [SerializeField] private float minShakeInterval = 0.05f; // антиспам
+    [SerializeField] private float globalShakeScale = 1f;   
+
+    private int mouseInterracted = -1;
 
     private List<Vector3> initPoses;
+    private Tweener camShakeTween;
+    private Tween logMultTween, radarMultTween, actionMultTween;
+    private float lastShakeTime;
+
+    void Awake()
+    {
+        if (!targetCamera) targetCamera = Camera.main;
+    }
+
+    private void OnEnable()
+    {
+        EventBus.Subscribe<PlayerDamaged>(OnPlayerDamagedShake);
+        // EventBus.Subscribe<PlayerFired>(OnPlayerFiredShake);
+    }
+
+    private void OnDisable()
+    {
+        EventBus.Unsubscribe<PlayerDamaged>(OnPlayerDamagedShake);
+        // EventBus.Unsubscribe<PlayerFired>(OnPlayerFiredShake);
+
+        KillAllTweens();
+    }
 
     private void Start()
     {
-        EventBus.Subscribe<PlayerDamaged>(StartShake);
-
+        if (buttons == null) buttons = new GameObject[0];
+        initPoses = new List<Vector3>(buttons.Length);
         for (int i = 0; i < buttons.Length; i++)
-        {
-            initPoses.Add(buttons[i].transform.position);
-        }
+            initPoses.Add(buttons[i] ? buttons[i].transform.position : Vector3.zero);
+
+        SetPanelMults(baseLogMult, baseRadarMult, baseActionMult);
     }
 
-    // Update is called once per frame
     void Update()
     {
-
         SetMapTexture(mapMesh, mapImage);
         CameraTrackMouse();
         HandleMouse();
-        HandleShake();
 
         for (int i = 0; i < buttons.Length; i++)
-        {
             HandleButtonClick(i);
-        }
-
     }
 
     private void HandleButtonClick(int number)
     {
-        if (Input.GetKey((KeyCode)(number + 256)) || Input.GetKey((KeyCode)(number + 48)) || mouseInterracted == number)
+        if (number < 0 || number >= buttons.Length || buttons[number] == null) return;
+
+        bool pressedDigit =
+            Input.GetKey((KeyCode)(number + 256)) ||  
+            Input.GetKey((KeyCode)(number + 48));     
+
+        if (pressedDigit || mouseInterracted == number)
         {
             buttons[number].transform.position = initPoses[number] + Vector3.down * buttonStroke;
         }
         else
         {
-            buttons[number].transform.position = Vector3.Lerp(buttons[number].transform.position, initPoses[number], Time.deltaTime * buttonSpeed);
+            buttons[number].transform.position =
+                Vector3.Lerp(buttons[number].transform.position, initPoses[number], Time.deltaTime * buttonSpeed);
         }
     }
-    private void CameraTrackMouse() 
-    {
-        Vector3 mousePos = new Vector3(Input.mousePosition.x/(Screen.width), Input.mousePosition.y/(Screen.height), 0);
 
-        Camera.main.transform.rotation = Quaternion.Lerp(Camera.main.transform.rotation, Quaternion.Euler(Mathf.Lerp(maxCameraRotation.x, minCameraRotation.x, mousePos.y),
-                                                    Mathf.Lerp(maxCameraRotation.y, minCameraRotation.y, mousePos.x),
-                                                    0), Time.deltaTime * 5);
+    private void CameraTrackMouse()
+    {
+        if (!targetCamera) return;
+        Vector3 mp = new Vector3(Input.mousePosition.x / Screen.width, Input.mousePosition.y / Screen.height, 0f);
+        var target = Quaternion.Euler(
+            Mathf.Lerp(maxCameraRotation.x, minCameraRotation.x, mp.y),
+            Mathf.Lerp(maxCameraRotation.y, minCameraRotation.y, mp.x),
+            0f);
+        targetCamera.transform.rotation =
+            Quaternion.Lerp(targetCamera.transform.rotation, target, Time.deltaTime * Mathf.Max(0.01f, lookLerp));
     }
+
     private void HandleMouse()
     {
         if (Input.GetKeyDown(KeyCode.Mouse0))
         {
-            Vector3 mousePosition = Input.mousePosition;
-            Ray ray = UnityEngine.Camera.main.ScreenPointToRay(mousePosition);
-            Debug.DrawRay(ray.origin, ray.direction * 10f, Color.yellow);
-            RaycastHit hit;
-            if (Physics.Raycast(ray, out hit))
+            Ray ray = (targetCamera ? targetCamera : Camera.main).ScreenPointToRay(Input.mousePosition);
+            Debug.DrawRay(ray.origin, ray.direction * 10f, Color.yellow, 0.1f);
+            if (Physics.Raycast(ray, out RaycastHit hit))
             {
-                int number;
-                if (int.TryParse(hit.collider.name, out number))
+                if (int.TryParse(hit.collider.name, out int number))
                 {
                     mouseInterracted = number;
-                    console.PressDigit(number);
+                    console?.PressDigit(number);
                 }
+                else mouseInterracted = -1;
             }
-            else
-            {
-                mouseInterracted = -1;
-            }
+            else mouseInterracted = -1;
         }
         else
         {
@@ -108,64 +176,121 @@ public class InterfaceController : MonoBehaviour
 
         if (Input.GetKey(KeyCode.Mouse0))
         {
-            Vector3 mousePosition = Input.mousePosition;
-            Ray ray = UnityEngine.Camera.main.ScreenPointToRay(mousePosition);
-            Debug.DrawRay(ray.origin, ray.direction * 10f, Color.yellow);
-            RaycastHit hit;
-            if (Physics.Raycast(ray, out hit))
+            Ray ray = (targetCamera ? targetCamera : Camera.main).ScreenPointToRay(Input.mousePosition);
+            Debug.DrawRay(ray.origin, ray.direction * 10f, Color.yellow, 0.1f);
+            if (Physics.Raycast(ray, out RaycastHit hit))
             {
-                int number;
-                if (int.TryParse(hit.collider.name, out number))
+                if (int.TryParse(hit.collider.name, out int number))
                 {
                     Vector3 dir = Vector3.zero;
-                    if (number == 2) { dir = Vector2.down; }
-                    if (number == 8) { dir = Vector2.up; }
-                    if (number == 4) { dir = Vector2.left; }
-                    if (number == 5) { dir = Vector2.right; }
+                    if (number == 2) dir = Vector2.down;
+                    if (number == 8) dir = Vector2.up;
+                    if (number == 4) dir = Vector2.left;
+                    if (number == 6) dir = Vector2.right; 
                     EventBus.Publish(new ConsoleMoveInput(dir));
                 }
             }
         }
     }
-    public void HandleShake()
-    {
-        if(_shakeCooldown < shakeCooldown)
-        {
-            _shakeCooldown += Time.deltaTime;
-
-            Camera.main.transform.localPosition = new Vector3(Mathf.Sin(Time.time * 50) * magnitude, 
-                                                        0, 0);
-
-            logMesh.materials[1].SetFloat("_mult", Mathf.Lerp(0.05f * magnitude, 0.001f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
-            radarMesh.materials[1].SetFloat("_mult", Mathf.Lerp(0.05f * magnitude, 0.028f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
-            actionMesh.materials[1].SetFloat("_mult", Mathf.Lerp(0.05f * magnitude, 0.001f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
-        }
-        else if(_shakeCooldown > shakeCooldown)
-        {
-            _shakeCooldown = shakeCooldown;
-        }
-        else
-        {
-            Camera.main.transform.localPosition = Vector3.Lerp(Camera.main.transform.localPosition, Vector3.zero, Time.deltaTime * 5);
-            logMesh.materials[1].SetFloat("_mult", 0.001f);
-            radarMesh.materials[1].SetFloat("_mult", 0.028f);
-            actionMesh.materials[1].SetFloat("_mult", 0.001f);
-        }
-    }
 
     private void SetMapTexture(MeshRenderer mesh, RawImage image)
     {
-        Material material = mesh.materials[1];
-
-        material.mainTexture = image.texture;
-
-        mesh.materials[1] = material;
+        if (!mesh || image == null) return;
+        var mats = mesh.materials;
+        if (mats.Length > 1 && image.texture)
+        {
+            mats[1].mainTexture = image.texture;
+            mesh.materials = mats;
+        }
     }
 
-
-    public void StartShake(PlayerDamaged pdEvent)
+    private void OnPlayerDamagedShake(PlayerDamaged e)
     {
-        magnitude = magnitudeMult;
-        _shakeCooldown = 0;
+
+        float scale = 1f;
+        TriggerShake(onHit, scale);
     }
+
+    // private void OnPlayerFiredShake(PlayerFired _)
+    // {
+    //     TriggerShake(onShot, 1f);
+    // }
+
+
+    public void TriggerShake(ShakeProfile profile, float scale = 1f)
+    {
+        if (!targetCamera) targetCamera = Camera.main;
+        if (!targetCamera) return;
+
+        if (Time.unscaledTime - lastShakeTime < minShakeInterval) return;
+        lastShakeTime = Time.unscaledTime;
+
+        float dur = Mathf.Max(0.01f, profile.duration);
+        Vector3 str = profile.strength * (globalShakeScale * Mathf.Max(0.001f, scale));
+
+        camShakeTween?.Kill(true);
+        camShakeTween = targetCamera.transform.DOShakePosition(
+            dur, str, profile.vibrato, profile.randomness, false, profile.fadeOut
+        );
+
+        float logTarget = baseLogMult + profile.panelsPulse * scale;
+        float radarTarget = baseRadarMult + profile.panelsPulse * scale;
+        float actionTarget = baseActionMult + profile.panelsPulse * scale;
+
+        logMultTween?.Kill();
+        radarMultTween?.Kill();
+        actionMultTween?.Kill();
+
+        float up = Mathf.Min(0.25f * dur, 0.1f);
+        float down = Mathf.Max(dur - up, 0.05f);
+
+        logMultTween = DOTween.Sequence()
+            .Append(DOTween.To(() => GetMult(logMesh, baseLogMult), v => SetMult(logMesh, v), logTarget, up))
+            .Append(DOTween.To(() => GetMult(logMesh, logTarget), v => SetMult(logMesh, v), baseLogMult, down).SetEase(profile.panelsEase));
+
+        radarMultTween = DOTween.Sequence()
+            .Append(DOTween.To(() => GetMult(radarMesh, baseRadarMult), v => SetMult(radarMesh, v), radarTarget, up))
+            .Append(DOTween.To(() => GetMult(radarMesh, radarTarget), v => SetMult(radarMesh, v), baseRadarMult, down).SetEase(profile.panelsEase));
+
+        actionMultTween = DOTween.Sequence()
+            .Append(DOTween.To(() => GetMult(actionMesh, baseActionMult), v => SetMult(actionMesh, v), actionTarget, up))
+            .Append(DOTween.To(() => GetMult(actionMesh, actionTarget), v => SetMult(actionMesh, v), baseActionMult, down).SetEase(profile.panelsEase));
+    }
+
+    private void KillAllTweens()
+    {
+        camShakeTween?.Kill();
+        logMultTween?.Kill();
+        radarMultTween?.Kill();
+        actionMultTween?.Kill();
+    }
+
+    private float GetMult(MeshRenderer mr, float fallback)
+    {
+        if (!mr) return fallback;
+        var mats = mr.materials;
+        if (mats.Length <= 1 || mats[1] == null) return fallback;
+        if (!mats[1].HasProperty(multProp)) return fallback;
+        return mats[1].GetFloat(multProp);
+    }
+
+    private void SetMult(MeshRenderer mr, float v)
+    {
+        if (!mr) return;
+        var mats = mr.materials;
+        if (mats.Length <= 1 || mats[1] == null) return;
+        if (!mats[1].HasProperty(multProp)) return;
+        mats[1].SetFloat(multProp, v);
+        mr.materials = mats;
+    }
+
+    private void SetPanelMults(float log, float radar, float action)
+    {
+        SetMult(logMesh, log);
+        SetMult(radarMesh, radar);
+        SetMult(actionMesh, action);
+    }
+
+    public void ShakeOnHit(float scale = 1f) => TriggerShake(onHit, Mathf.Max(0.1f, scale));
+    public void ShakeOnShot(float scale = 1f) => TriggerShake(onShot, Mathf.Max(0.1f, scale));
 }

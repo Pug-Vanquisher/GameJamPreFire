@@ -118,6 +118,7 @@ public class ConsoleLogUI : MonoBehaviour
     void OnConsoleMessage(ConsoleMessage e)
     {
         string ts = e.Ts.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        SoundManager.Instance.PlaySound(1);
         string hex = e.Sender switch
         {
             ConsoleSender.Robot => robotHex,

@@ -49,6 +49,7 @@ public static class PlayerInventory
         Health = Mathf.Max(0, Health - Mathf.Abs(dmg));
 
         EventBus.Publish(new PlayerDamaged(Mathf.Abs(dmg), Health));
+        SoundManager.Instance.PlaySound(3);
         if (old > 0 && Health == 0)
             EventBus.Publish(new PlayerDied());
     }

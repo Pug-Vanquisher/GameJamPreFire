@@ -19,26 +19,38 @@ public class PlayerController2D : MonoBehaviour
     [Tooltip("Ћитров на единицу пути (юнит карты)")]
     [SerializeField] private float fuelPerUnit = 0.0008333f;
 
-    // направление из консоли движени€ (обновл€етс€ каждый кадр при удержании 1/2/6/4 внутри меню)
+    // режим: можно ли принимать событи€ движени€ из консоли
+    private bool allowConsoleMove = false;
+
+    // направление из консоли движени€
     private Vector2 consoleDir = Vector2.zero;
     private float consoleDirTs = -999f;
-    private const float consoleHoldTimeout = 0.05f; // сколько считаем ввод Ђактивнымї без нового событи€
+    private const float consoleHoldTimeout = 0.05f;
 
     void OnEnable()
     {
         EventBus.Subscribe<ConsoleMoveInput>(OnConsoleMove);
+        EventBus.Subscribe<ConsoleMoveModeChanged>(OnConsoleMoveModeChanged);
         EventBus.Subscribe<MapGenerated>(OnMapGenerated);
         EventBus.Subscribe<RunStarted>(OnRunStarted);
     }
     void OnDisable()
     {
         EventBus.Unsubscribe<ConsoleMoveInput>(OnConsoleMove);
+        EventBus.Unsubscribe<ConsoleMoveModeChanged>(OnConsoleMoveModeChanged);
         EventBus.Unsubscribe<MapGenerated>(OnMapGenerated);
         EventBus.Unsubscribe<RunStarted>(OnRunStarted);
     }
 
+    void OnConsoleMoveModeChanged(ConsoleMoveModeChanged e)
+    {
+        allowConsoleMove = e.Active;
+        if (!allowConsoleMove) { consoleDir = Vector2.zero; consoleDirTs = -999f; }
+    }
+
     void OnConsoleMove(ConsoleMoveInput e)
     {
+        if (!allowConsoleMove) return;   // игнор, если меню движени€ не активно
         consoleDir = e.Dir;
         consoleDirTs = Time.time;
     }
@@ -47,7 +59,7 @@ public class PlayerController2D : MonoBehaviour
     {
         PlayerState.Speed = speed;
 
-        // страховка на случай отсутстви€ GameRunManager
+        // страховка
         if (PlayerInventory.MaxHealth > 0 && PlayerInventory.Health == 0
             && PlayerInventory.Ammo == 0 && Mathf.Approximately(PlayerInventory.Fuel, 0f))
         {
@@ -85,7 +97,6 @@ public class PlayerController2D : MonoBehaviour
     {
         PlayerState.Pos = p;
         EventBus.Publish(new PlayerMoved(PlayerState.Pos));
-        // если есть видимый объект:
         // transform.position = new Vector3(p.x, p.y, transform.position.z);
     }
 
@@ -96,11 +107,11 @@ public class PlayerController2D : MonoBehaviour
 
         Vector2 dir = Vector2.zero;
 
-        // 1) основное управление Ч из меню Ђƒвижениеї
-        if (Time.time - consoleDirTs < consoleHoldTimeout)
+        // 1) ќсновное управление Ч из меню Ђƒвижениеї
+        if (allowConsoleMove && (Time.time - consoleDirTs < consoleHoldTimeout))
             dir += consoleDir;
 
-        // 2) отладочный ввод (WASD / стрелки)
+        // 2) ќтладочный ввод
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (debugWASD)
         {
@@ -115,7 +126,6 @@ public class PlayerController2D : MonoBehaviour
 
         Vector2 delta = dir * (PlayerState.Speed * Time.deltaTime);
 
-        // —писываем топливо, движение не блокируем
         float dist = delta.magnitude;
         PlayerInventory.ConsumeFuelByDistance(dist);
 
@@ -126,6 +136,6 @@ public class PlayerController2D : MonoBehaviour
         );
 
         EventBus.Publish(new PlayerMoved(PlayerState.Pos));
-        // transform.position = new Vector3(PlayerState.Pos.x, PlayerState.Pos.y, transform.position.z);
+        //SoundManager.Instance.PlaySound(6);
     }
 }
