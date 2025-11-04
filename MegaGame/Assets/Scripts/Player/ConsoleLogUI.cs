@@ -113,8 +113,6 @@ public class ConsoleLogUI : MonoBehaviour
 
         RecalculateAllLineCounts();
         RenderWindow(forceBottom: true);
-
-        EventBus.Publish(new ConsoleMessage(ConsoleSender.World, "Новый забег начат."));
     }
 
     void OnConsoleMessage(ConsoleMessage e)

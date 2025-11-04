@@ -40,6 +40,8 @@ public class CommandConsoleUI : MonoBehaviour
     private bool busy;
     private string busyTitle;
 
+
+
     void OnEnable()
     {
         EventBus.Subscribe<VisibleTargetsChanged>(OnVisibleTargetsChanged);
@@ -62,12 +64,10 @@ public class CommandConsoleUI : MonoBehaviour
     {
         if (!autoFocus) return;
 
-        // Ифы убил
         for (int d = 0; d <= 9; d++)
             if (Input.GetKeyDown(KeyCode.Alpha0 + d) || Input.GetKeyDown(KeyCode.Keypad0 + d))
                 PressDigit(d);
 
-        // Ебаный нам пад
         if (CurrentMenu == Menu.Move)
         {
             Vector2 dir = Vector2.zero;
@@ -76,7 +76,6 @@ public class CommandConsoleUI : MonoBehaviour
             if (Input.GetKey(KeyCode.Keypad6)) dir += Vector2.right;  // Восток
             if (Input.GetKey(KeyCode.Keypad4)) dir += Vector2.left;   // Запад
 
-            // альтернативно
             if (Input.GetKey(KeyCode.UpArrow)) dir += Vector2.up;
             if (Input.GetKey(KeyCode.DownArrow)) dir += Vector2.down;
             if (Input.GetKey(KeyCode.RightArrow)) dir += Vector2.right;
@@ -124,6 +123,7 @@ public class CommandConsoleUI : MonoBehaviour
             sb.AppendLine("[2] Бой >");
             sb.AppendLine("[3] Диагностика >");
             sb.AppendLine("[4] Движение >");
+            sb.AppendLine("[5] Задачи");                // <<< добавлено
             sb.AppendLine();
             sb.AppendLine("[9] Прокрутка логов ↑");
             sb.AppendLine("[6] Прокрутка логов ↓");
@@ -150,10 +150,10 @@ public class CommandConsoleUI : MonoBehaviour
         }
         else if (m == Menu.Move)
         {
-            sb.AppendLine("[8] Север");
-            sb.AppendLine("[2] Юг");
-            sb.AppendLine("[6] Восток");
-            sb.AppendLine("[4] Запад");
+            sb.AppendLine("[8] Север  (удерживать)");
+            sb.AppendLine("[2] Юг     (удерживать)");
+            sb.AppendLine("[6] Восток (удерживать)");
+            sb.AppendLine("[4] Запад  (удерживать)");
             sb.AppendLine("[0] Назад");
         }
 
@@ -166,6 +166,8 @@ public class CommandConsoleUI : MonoBehaviour
         if (d == 2) { stack.Push(Menu.Combat); RenderMenu(Menu.Combat); return; }
         if (d == 3) { stack.Push(Menu.Diagnostics); RenderMenu(Menu.Diagnostics); return; }
         if (d == 4) { stack.Push(Menu.Move); RenderMenu(Menu.Move); return; }
+
+        if (d == 5) { GameRunManager.Instance?.AnnounceObjectives(); return; }   // <<< добавлено
 
         if (d == 9) { EventBus.Publish(new ConsoleScrollRequest(+1f)); return; }
         if (d == 6) { EventBus.Publish(new ConsoleScrollRequest(-1f)); return; }

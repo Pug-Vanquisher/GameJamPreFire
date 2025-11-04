@@ -1614,7 +1614,7 @@ MonoBehaviour:
   screen: {fileID: 219307453}
   meter: {fileID: 0}
   wordWrap: 1
-  visibleLines: 12
+  visibleLines: 18
   scrollStepLines: 5
   robotColor: {r: 0.55, g: 0.95, b: 0.55, a: 1}
   enemyColor: {r: 0.95, g: 0.45, b: 0.45, a: 1}
@@ -1883,7 +1883,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   phrases: {fileID: 11400000, guid: 753c4c5d87c2ef942811dc1cf175b357, type: 2}
-  moveIntentChance: 0.05
+  moveIntentChance: 0.01
   retreatAnnounceChance: 0.7
   helpAnnounceChance: 0.7
   heardAnnounceChance: 0.5
@@ -1928,6 +1928,7 @@ MonoBehaviour:
   startHp: 100
   startAmmo: 100
   startMag: 10
+  objectiveCitiesCount: 1
 --- !u!1 &1674535723
 GameObject:
   m_ObjectHideFlags: 0
@@ -2043,16 +2044,16 @@ MonoBehaviour:
   enemyIconPrefab: {fileID: 2786413986176961230, guid: f8e2ef2912b05af439727cb762e2144c, type: 3}
   campIconPrefab: {fileID: 0}
   citySpriteVariants:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 21300000, guid: d896da2bf97019540bbc26b1880fe99a, type: 3}
+  - {fileID: 21300000, guid: 8065ea9bae9e3b8418f5abdba90403af, type: 3}
+  - {fileID: 21300000, guid: 7f3a2de1268b126418da2404efb4e374, type: 3}
+  - {fileID: 21300000, guid: c60b6aabca57cd540963b00e1138e53c, type: 3}
+  - {fileID: 21300000, guid: 2cac77b497b899044a6adf2fa893c9cc, type: 3}
+  - {fileID: 21300000, guid: b790790f7c69cc94da53a9f541a17e71, type: 3}
+  - {fileID: 21300000, guid: 571c3cc55ce341349befb3698bd7a67e, type: 3}
+  - {fileID: 21300000, guid: cc631105805b0214db32098992b4b04d, type: 3}
+  - {fileID: 21300000, guid: 7b1aaa0d9202dc848a21b224c7b8c333, type: 3}
+  - {fileID: 21300000, guid: 13b3691acb3602f498c9b817cd60af7b, type: 3}
   capitalSpriteVariants:
   - {fileID: 21300000, guid: d542c9cbebab5684980ac3b7a9746d07, type: 3}
   - {fileID: 21300000, guid: b0f71038ba2e66b4fb53f381d8683930, type: 3}
@@ -2060,14 +2061,14 @@ MonoBehaviour:
   - {fileID: 21300000, guid: 25dcdd667c913424490f9fc48124c18b, type: 3}
   showCityNames: 1
   showCapitalName: 1
-  texWidth: 512
-  texHeight: 512
+  texWidth: 256
+  texHeight: 256
   filter: 0
   regionHatchColor: {r: 0.21698111, g: 0.21698111, b: 0.21698111, a: 1}
   regionHatchSpacing: 25
   regionHatchThickness: 1
   regionBorderColor: {r: 0, g: 0, b: 0, a: 1}
-  roadColor: {r: 0.122641504, g: 0.122641504, b: 0.122641504, a: 1}
+  roadColor: {r: 0.3773585, g: 0.3773585, b: 0.3773585, a: 1}
   cityColor: {r: 1, g: 0.8822219, b: 0.2028302, a: 1}
   capitalColor: {r: 0, g: 1, b: 1, a: 1}
   baseColor: {r: 0.7653381, g: 0.40000004, b: 0.9490196, a: 1}
