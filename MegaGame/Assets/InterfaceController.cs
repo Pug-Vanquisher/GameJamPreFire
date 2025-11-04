@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
-
+using Events;
 public class InterfaceController : MonoBehaviour
 {
 
@@ -10,6 +10,9 @@ public class InterfaceController : MonoBehaviour
     [SerializeField] private RawImage mapImage;
 
     [SerializeField] private MeshRenderer mapMesh;
+    [SerializeField] private MeshRenderer logMesh;
+    [SerializeField] private MeshRenderer actionMesh;
+    [SerializeField] private MeshRenderer radarMesh;
 
     [SerializeField] private GameObject[] buttons;
 
@@ -22,19 +25,19 @@ public class InterfaceController : MonoBehaviour
 
     private int mouseInterracted;
 
-    [SerializeField] private float stepCooldown;
-    [SerializeField] private float magnitude;
-    [SerializeField] private Vector3[] walkShakes;
-    private float _stepCooldown;
+    [SerializeField] private float magnitudeMult;
+    [SerializeField] private float shakeCooldown;
+    private float _shakeCooldown;
+    private float magnitude;
+
     private int activeLeg;
-    private static bool moveShakes;
-    private Vector3 cameraInitPose = new Vector3(18.1769905f, -11.5327806f, -4.4314208f);
 
     private List<Vector3> initPoses;
 
     private void Start()
     {
-        moveShakes = false;
+        EventBus.Subscribe<PlayerDamaged>(StartShake);
+
         for (int i = 0; i < buttons.Length; i++)
         {
             initPoses.Add(buttons[i].transform.position);
@@ -44,7 +47,6 @@ public class InterfaceController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        Camera.main.transform.position = Vector3.Lerp(Camera.main.transform.position, cameraInitPose, Time.deltaTime * 5);
 
         SetMapTexture(mapMesh, mapImage);
         CameraTrackMouse();
@@ -60,10 +62,6 @@ public class InterfaceController : MonoBehaviour
 
     private void HandleButtonClick(int number)
     {
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            ShakeOnMove();
-        }
         if (Input.GetKey((KeyCode)(number + 256)) || Input.GetKey((KeyCode)(number + 48)) || mouseInterracted == number)
         {
             buttons[number].transform.position = initPoses[number] + Vector3.down * buttonStroke;
@@ -83,7 +81,7 @@ public class InterfaceController : MonoBehaviour
     }
     private void HandleMouse()
     {
-        if (Input.GetKeyDown(KeyCode.Mouse0))
+        if (Input.GetKey(KeyCode.Mouse0))
         {
             Vector3 mousePosition = Input.mousePosition;
             Ray ray = UnityEngine.Camera.main.ScreenPointToRay(mousePosition);
@@ -94,13 +92,13 @@ public class InterfaceController : MonoBehaviour
                 int number;
                 if (int.TryParse(hit.collider.name, out number))
                 {
+                    if(console)
                     mouseInterracted = number;
                     console.PressDigit(number);
                 }
             }
             else
             {
-
                 mouseInterracted = -1;
             }
         }
@@ -110,24 +108,29 @@ public class InterfaceController : MonoBehaviour
             mouseInterracted = -1;
         }
     }
-
-    private void HandleShake()
+    public void HandleShake()
     {
-        if(_stepCooldown < stepCooldown)
+        if(_shakeCooldown < shakeCooldown)
         {
-            _stepCooldown += Time.deltaTime;
-            Camera.main.transform.position += Vector3.forward * Mathf.Sin(Time.time * (_stepCooldown/ stepCooldown)) * magnitude;
+            _shakeCooldown += Time.deltaTime;
+
+            Camera.main.transform.localPosition = new Vector3(Mathf.Sin(Time.time * 50) * magnitude, 
+                                                        0, 0);
+
+            logMesh.materials[1].SetFloat("mult", Mathf.Lerp(1, 0.001f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
+            radarMesh.materials[1].SetFloat("mult", Mathf.Lerp(1, 0.028f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
+            actionMesh.materials[1].SetFloat("mult", Mathf.Lerp(1, 0.001f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
         }
-        else { _stepCooldown = stepCooldown; }
-
-
-        if(moveShakes && _stepCooldown >= stepCooldown)
+        else if(_shakeCooldown > shakeCooldown)
         {
-            moveShakes = false;
-            _stepCooldown = 0;
-            if (activeLeg == 1) { activeLeg = 0; } else { activeLeg = 1; }
-            Camera.main.transform.forward = Vector3.Lerp(Camera.main.transform.forward, walkShakes[activeLeg].normalized, 0.05f);//AngleAxis(0.01f, Vector3.Cross(, Camera.main.transform.forward));
-            Camera.main.transform.position = cameraInitPose + walkShakes[activeLeg];
+            _shakeCooldown = shakeCooldown;
+        }
+        else
+        {
+            Camera.main.transform.localPosition = Vector3.Lerp(Camera.main.transform.localPosition, Vector3.zero, Time.deltaTime * 5);
+            logMesh.materials[1].SetFloat("mult", 0.001f);
+            radarMesh.materials[1].SetFloat("mult", 0.028f);
+            actionMesh.materials[1].SetFloat("mult", 0.001f);
         }
     }
 
@@ -140,9 +143,10 @@ public class InterfaceController : MonoBehaviour
         mesh.materials[1] = material;
     }
 
-    public static void ShakeOnMove()
-    {
-        moveShakes = true;
-    }
 
+    public void StartShake(PlayerDamaged pdEvent)
+    {
+        magnitude = magnitudeMult;
+        _shakeCooldown = 0;
+    }
 }
