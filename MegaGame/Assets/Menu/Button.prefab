@@ -67,15 +67,15 @@ MonoBehaviour:
       m_Calls: []
   m_text: Continue
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 7ab4956497ca9a048be43f9676319c11, type: 2}
+  m_sharedMaterial: {fileID: 1535518185155482596, guid: 7ab4956497ca9a048be43f9676319c11, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4278228991
+  m_fontColor: {r: 1, g: 0.59165215, b: 0, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -273,5 +273,5 @@ MonoBehaviour:
   title: 
   buttonName: {fileID: 9044466881533104157}
   button: {fileID: 3939553075659954431}
-  defaultColor: {r: 1, g: 1, b: 1, a: 1}
+  defaultColor: {r: 1, g: 0.5921569, b: 0, a: 1}
   hoverColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
