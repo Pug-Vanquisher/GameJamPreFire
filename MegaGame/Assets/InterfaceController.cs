@@ -92,9 +92,14 @@ public class InterfaceController : MonoBehaviour
                 int number;
                 if (int.TryParse(hit.collider.name, out number))
                 {
-                    if(console)
                     mouseInterracted = number;
                     console.PressDigit(number);
+                    Vector3 dir = Vector3.zero;
+                    if (number == 2) { dir = Vector2.down; }
+                    if (number == 8) { dir = Vector2.up; }
+                    if (number == 4) { dir = Vector2.left; }
+                    if (number == 5) { dir = Vector2.right; }
+                    EventBus.Publish(new ConsoleMoveInput(dir));
                 }
             }
             else
@@ -117,9 +122,9 @@ public class InterfaceController : MonoBehaviour
             Camera.main.transform.localPosition = new Vector3(Mathf.Sin(Time.time * 50) * magnitude, 
                                                         0, 0);
 
-            logMesh.materials[1].SetFloat("mult", Mathf.Lerp(1, 0.001f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
-            radarMesh.materials[1].SetFloat("mult", Mathf.Lerp(1, 0.028f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
-            actionMesh.materials[1].SetFloat("mult", Mathf.Lerp(1, 0.001f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
+            logMesh.materials[1].SetFloat("_mult", Mathf.Lerp(0.05f * magnitude, 0.001f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
+            radarMesh.materials[1].SetFloat("_mult", Mathf.Lerp(0.05f * magnitude, 0.028f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
+            actionMesh.materials[1].SetFloat("_mult", Mathf.Lerp(0.05f * magnitude, 0.001f, Mathf.Clamp01(_shakeCooldown / shakeCooldown * 0.75f)));
         }
         else if(_shakeCooldown > shakeCooldown)
         {
@@ -128,9 +133,9 @@ public class InterfaceController : MonoBehaviour
         else
         {
             Camera.main.transform.localPosition = Vector3.Lerp(Camera.main.transform.localPosition, Vector3.zero, Time.deltaTime * 5);
-            logMesh.materials[1].SetFloat("mult", 0.001f);
-            radarMesh.materials[1].SetFloat("mult", 0.028f);
-            actionMesh.materials[1].SetFloat("mult", 0.001f);
+            logMesh.materials[1].SetFloat("_mult", 0.001f);
+            radarMesh.materials[1].SetFloat("_mult", 0.028f);
+            actionMesh.materials[1].SetFloat("_mult", 0.001f);
         }
     }
 
