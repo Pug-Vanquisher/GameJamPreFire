@@ -15,6 +15,7 @@ public class MenuScript : MonoBehaviour
 
     [SerializeField] private GameObject[] window;
     [SerializeField] private GameObject image;
+    [SerializeField] private GameObject image2;
     [SerializeField] private GameRunManager gamemanager;
     private Menu currentMenu;
 
@@ -22,6 +23,7 @@ public class MenuScript : MonoBehaviour
     void Start()
     {
         EventBus.Subscribe<PlayerDied>(Defeat);
+        EventBus.Subscribe<WinCondition>(Win);
     }
 
     // Update is called once per frame
@@ -38,7 +40,16 @@ public class MenuScript : MonoBehaviour
             window[i].SetActive(i == (int)currentMenu && currentMenu != Menu.None);
             if (i == (int)currentMenu && currentMenu != Menu.None) { showImage = true; }
         }
-        image.SetActive(showImage);
+        if(currentMenu == Menu.Tutorial)
+        {
+            image.SetActive(false);
+            image2.SetActive(true);
+        }
+        else
+        {
+            image.SetActive(showImage);
+            image2.SetActive(false);
+        }
     }
 
     public void Pause(bool isPaused)
@@ -59,7 +70,7 @@ public class MenuScript : MonoBehaviour
         Pause(false);
     }
 
-    public void Win()
+    public void Win(WinCondition win)
     {
         currentMenu = Menu.Win;
     }

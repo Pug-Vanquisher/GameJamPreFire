@@ -154,9 +154,7 @@ public class GameRunManager : MonoBehaviour
 
         if (left <= 0)
         {
-            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
-                "Все цели захвачены. Подготовка к следующему вылету..."));
-            StartCoroutine(RestartSoon());
+            EventBus.Publish(new WinCondition());
         }
     }
 

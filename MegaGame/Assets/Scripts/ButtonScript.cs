@@ -9,7 +9,7 @@ public class ButtonScript : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
     public Button button;
     public Color defaultColor = Color.white;
     public Color hoverColor = Color.yellow;
-
+    public bool isChecked;
     void Start()
     {
         buttonName.text = " " + title;
@@ -17,7 +17,10 @@ public class ButtonScript : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
     public void OnPointerEnter(PointerEventData pointerEventData)
     {
         buttonName.color = hoverColor;
-        buttonName.text = " >" + title;
+        if (!isChecked)
+        {
+            buttonName.text = " >" + title;
+        }
     }
     public void OnPointerExit(PointerEventData pointerEventData)
     {

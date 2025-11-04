@@ -47,8 +47,6 @@ public class InterfaceController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-
-        SetMapTexture(mapMesh, mapImage);
         CameraTrackMouse();
         HandleMouse();
         HandleShake();

@@ -116,4 +116,12 @@ namespace Events
             Locale = locale;
         }
     }
+    public readonly struct WinCondition
+    {
+        public readonly int id;
+        public WinCondition(int ID = 0)
+        {
+            id = ID;
+        }
+    }
 }

@@ -5,8 +5,8 @@ using Events; // <-- EventBus события
 public class AudioSettingsManager : MonoBehaviour
 {
     [Header("Sliders")]
-    [SerializeField] private Slider globalSlider;   // общий (SFX/UI)
-    [SerializeField] private Slider musicSlider;    // музыка
+    [SerializeField] private panel globalSlider;   // общий (SFX/UI)
+    [SerializeField] private panel musicSlider;    // музыка
 
     public static float GlobalVolume { get; private set; } = 1f;
     public static float MusicVolume { get; private set; } = 1f;
@@ -19,17 +19,11 @@ public class AudioSettingsManager : MonoBehaviour
         GlobalVolume = PlayerPrefs.GetFloat(GlobalKey, 1f);
         MusicVolume = PlayerPrefs.GetFloat(MusicKey, 1f);
 
-        if (globalSlider)
-        {
-            globalSlider.value = GlobalVolume;
-            globalSlider.onValueChanged.AddListener(SetGlobalVolume);
-        }
+    }
 
-        if (musicSlider)
-        {
-            musicSlider.value = MusicVolume;
-            musicSlider.onValueChanged.AddListener(SetMusicVolume);
-        }
+    private void Update()
+    {
+
     }
 
     public void SetGlobalVolume(float value)
