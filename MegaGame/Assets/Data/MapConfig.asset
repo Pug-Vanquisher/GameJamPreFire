@@ -33,7 +33,7 @@ MonoBehaviour:
   garrisonSpawnRadius: 100
   garrisonMinSeparation: 35
   enemyDetectionRadius: 700
-  enemySpeedRange: {x: 220, y: 280}
+  enemySpeedRange: {x: 150, y: 175}
   roadKNearest: 3
   extraConnections: 8
   roadSegments: 24

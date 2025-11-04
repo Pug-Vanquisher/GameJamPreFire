@@ -2108,6 +2108,63 @@ RectTransform:
   m_AnchoredPosition: {x: -3.064, y: -4.07}
   m_SizeDelta: {x: 2, y: 4}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1001 &511298886
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -2.4464252
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.7477229
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -3.7403893
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938164808567262621, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6568830262687844020, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
+      propertyPath: m_Name
+      value: Sounds
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: f716bb531362d1d46930abe3557d21e1, type: 3}
 --- !u!1 &512415274
 GameObject:
   m_ObjectHideFlags: 0
@@ -3994,8 +4051,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4278274501
+  m_fontColor: {r: 0.7735849, g: 0.2848259, b: 0.003648994, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -4997,12 +5054,34 @@ MonoBehaviour:
   - {fileID: 1953158324}
   - {fileID: 451334837}
   - {fileID: 33882741}
+  targetCamera: {fileID: 0}
   buttonStroke: 0.05
   buttonSpeed: 20
   minCameraRotation: {x: 0.5, y: 91, z: -0.000000026681441}
   maxCameraRotation: {x: 2.5, y: 89, z: 0}
-  magnitudeMult: 0.001
-  shakeCooldown: 0.25
+  lookLerp: 5
+  multProp: _mult
+  baseLogMult: 0.001
+  baseRadarMult: 0.028
+  baseActionMult: 0.001
+  onHit:
+    duration: 0.25
+    strength: {x: 0.05, y: 0.02, z: 0}
+    vibrato: 25
+    randomness: 90
+    fadeOut: 1
+    panelsPulse: 0.04
+    panelsEase: 6
+  onShot:
+    duration: 0.12
+    strength: {x: 0.02, y: 0.01, z: 0}
+    vibrato: 20
+    randomness: 120
+    fadeOut: 1
+    panelsPulse: 0.02
+    panelsEase: 6
+  minShakeInterval: 0.05
+  globalShakeScale: 1
 --- !u!4 &1393486176 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: e15933f7caa64ca45b8cdf57063d2da0, type: 3}
@@ -5275,9 +5354,9 @@ MonoBehaviour:
   wordWrap: 1
   visibleLines: 18
   scrollStepLines: 4
-  robotColor: {r: 1, g: 1, b: 1, a: 1}
-  enemyColor: {r: 0.95, g: 0.45, b: 0.45, a: 1}
-  worldColor: {r: 1, g: 1, b: 1, a: 1}
+  robotColor: {r: 0.8396226, g: 0.4226081, b: 0, a: 1}
+  enemyColor: {r: 0.7264151, g: 0.14048593, b: 0.14048593, a: 1}
+  worldColor: {r: 0.83921576, g: 0.42352945, b: 0, a: 1}
   maxHistory: 800
   progressWidth: 22
 --- !u!114 &1572284084
@@ -5406,7 +5485,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 81158fc918ff5c7418b769274f45ca72, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  speed: 400
+  speed: 200
   debugWASD: 1
   fuelPerUnit: 0.0008333
 --- !u!114 &1585987792
@@ -5520,17 +5599,17 @@ MonoBehaviour:
   initialStaggerMax: 0.7
   maxMobilePerRegion: 5
   maxChasers: 5
-  helpBroadcastRadius: 2500
-  helpResponseRadius: 2500
+  helpBroadcastRadius: 1100
+  helpResponseRadius: 1100
   helpPursueTime: 12
   cowardRetreatProb: 0.7
-  hearShotRadius: 2200
+  hearShotRadius: 1100
   hearShotRespondProb: 0.5
   investigateTime: 8
   resupplyProb: 0.25
   resupplyAmmoRange: {x: 6, y: 14}
   resupplyMedsRange: {x: 1, y: 3}
-  debugBroadcastMovement: 1
+  debugBroadcastMovement: 0
   movementBroadcastHz: 3
 --- !u!114 &1585987799
 MonoBehaviour:
@@ -5549,6 +5628,7 @@ MonoBehaviour:
   startHp: 100
   startAmmo: 100
   startMag: 10
+  objectiveCitiesCount: 4
 --- !u!1 &1666907892
 GameObject:
   m_ObjectHideFlags: 0
@@ -5712,12 +5792,14 @@ MonoBehaviour:
   mapImage: {fileID: 1057465262}
   overlay: {fileID: 1742882464}
   playerMarker: {fileID: 1914376914}
-  cityIconPrefab: {fileID: 0}
-  capitalIconPrefab: {fileID: 0}
+  cityIconPrefab: {fileID: 2607597061796921045, guid: 052f3550a6fbc624486cfe88c6a684f3, type: 3}
+  capitalIconPrefab: {fileID: 2607597061796921045, guid: 838c1c29ca601b645829504782411027, type: 3}
   enemyIconPrefab: {fileID: 2786413986176961230, guid: f8e2ef2912b05af439727cb762e2144c, type: 3}
   campIconPrefab: {fileID: 0}
-  citySpriteVariants: []
-  capitalSpriteVariants: []
+  citySpriteVariants:
+  - {fileID: 21300000, guid: e77a9d3748207c843a437c2e22e943cc, type: 3}
+  capitalSpriteVariants:
+  - {fileID: 21300000, guid: e77a9d3748207c843a437c2e22e943cc, type: 3}
   showCityNames: 1
   showCapitalName: 1
   texWidth: 124
@@ -5730,7 +5812,7 @@ MonoBehaviour:
   roadColor: {r: 0.49056602, g: 0.47610357, b: 0.45585614, a: 1}
   cityColor: {r: 1, g: 0.8822219, b: 0.2028302, a: 1}
   capitalColor: {r: 0, g: 1, b: 1, a: 1}
-  baseColor: {r: 0.7653381, g: 0.40000004, b: 0.9490196, a: 1}
+  baseColor: {r: 0, g: 0, b: 0, a: 1}
   campColor: {r: 0.8, g: 0.3, b: 0.3, a: 1}
   roadWidthPx: 1
   nodeRadiusPx: 5
@@ -5755,7 +5837,7 @@ MonoBehaviour:
   hillsIsoA: 0.82
   hillsIsoB: 0.9
   hillsBand: 0.012
-  debugRender: 1
+  debugRender: 0
   showBoundaries: 1
   showHatch: 0
 --- !u!114 &1742882461
@@ -7330,3 +7412,4 @@ SceneRoots:
   - {fileID: 573399593}
   - {fileID: 58379454}
   - {fileID: 567665332}
+  - {fileID: 511298886}
