@@ -81,7 +81,7 @@ public class InterfaceController : MonoBehaviour
     }
     private void HandleMouse()
     {
-        if (Input.GetKey(KeyCode.Mouse0))
+        if (Input.GetKeyDown(KeyCode.Mouse0))
         {
             Vector3 mousePosition = Input.mousePosition;
             Ray ray = UnityEngine.Camera.main.ScreenPointToRay(mousePosition);
@@ -94,12 +94,6 @@ public class InterfaceController : MonoBehaviour
                 {
                     mouseInterracted = number;
                     console.PressDigit(number);
-                    Vector3 dir = Vector3.zero;
-                    if (number == 2) { dir = Vector2.down; }
-                    if (number == 8) { dir = Vector2.up; }
-                    if (number == 4) { dir = Vector2.left; }
-                    if (number == 5) { dir = Vector2.right; }
-                    EventBus.Publish(new ConsoleMoveInput(dir));
                 }
             }
             else
@@ -109,8 +103,28 @@ public class InterfaceController : MonoBehaviour
         }
         else
         {
-
             mouseInterracted = -1;
+        }
+
+        if (Input.GetKey(KeyCode.Mouse0))
+        {
+            Vector3 mousePosition = Input.mousePosition;
+            Ray ray = UnityEngine.Camera.main.ScreenPointToRay(mousePosition);
+            Debug.DrawRay(ray.origin, ray.direction * 10f, Color.yellow);
+            RaycastHit hit;
+            if (Physics.Raycast(ray, out hit))
+            {
+                int number;
+                if (int.TryParse(hit.collider.name, out number))
+                {
+                    Vector3 dir = Vector3.zero;
+                    if (number == 2) { dir = Vector2.down; }
+                    if (number == 8) { dir = Vector2.up; }
+                    if (number == 4) { dir = Vector2.left; }
+                    if (number == 5) { dir = Vector2.right; }
+                    EventBus.Publish(new ConsoleMoveInput(dir));
+                }
+            }
         }
     }
     public void HandleShake()
