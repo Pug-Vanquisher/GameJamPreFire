@@ -89,6 +89,35 @@ public class PhraseBank : ScriptableObject
     {
     "{prefix}, это {call}. Вступаем в бой с противником."
 };
+    [Header("Враг: слышали выстрелы — {prefix}, это {call}. Слышал(и) выстрелы на {dir} от нас, выдвигаемся на проверку.")]
+    [TextArea]
+    public string[] enemyHeardShots =
+{
+    "{prefix}, это {call}. Слышали выстрелы на {dir} от нас, выдвигаемся на проверку.",
+    "{prefix}, это {call}. Отмечаем выстрелы на {dir}, идём проверить."
+};
+
+    [Header("Враг: принял запрос о помощи — Вас принял {requester}, это {call}, направляемся на помощь.")]
+    [TextArea]
+    public string[] enemyHelpAck =
+    {
+    "Вас принял {requester}, это {call}, направляемся на помощь.",
+    "Принял {requester}. {call}, выдвигаемся на поддержку."
+};
+
+    [Header("Враг: пополнение в городе — {prefix}, это {call}. Привезли {what} {amount} в город {city}.")]
+    [TextArea]
+    public string[] enemyResupplyCity =
+    {
+    "{prefix}, это {call}. Привезли {what} {amount} в город {city}."
+};
+
+    [Header("Враг: пополнение в лагере — {prefix}, это {call}. Привезли {what} {amount} в лагерь {camp}, на {dir} от города {city}.")]
+    [TextArea]
+    public string[] enemyResupplyCampRelative =
+    {
+    "{prefix}, это {call}. Привезли {what} {amount} в лагерь {camp}, на {dir} от города {city}."
+};
 
 
     public string Pick(string[] arr) =>

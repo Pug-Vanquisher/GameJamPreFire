@@ -129,24 +129,59 @@ namespace Events
         { SquadId = squadId; Callsign = callsign; FromPos = fromPos; DestId = destId; DestPos = destPos; }
     }
 
-    public readonly struct ReinforcementRequested
+    public readonly struct PlayerFired
     {
-        public readonly string SquadId;
-        public readonly string Callsign;
-        public readonly UnityEngine.Vector2 Pos;   // где нужна помощь (обычно позиция боя/игрока)
-        public readonly float Radius;              // кого оповещаем
-        public ReinforcementRequested(string squadId, string callsign, UnityEngine.Vector2 pos, float radius)
-        { SquadId = squadId; Callsign = callsign; Pos = pos; Radius = radius; }
+        public readonly Vector2 Pos;
+        public PlayerFired(Vector2 pos) { Pos = pos; }
     }
 
-    // NEW: мобильный отряд вступил в бой
+    public readonly struct EnemyHeardShots
+    {
+        public readonly string SquadId, Callsign;
+        public readonly int DirIndex; // 0..7 (N,NE,E,SE,S,SW,W,NW)
+        public EnemyHeardShots(string id, string call, int dir) { SquadId = id; Callsign = call; DirIndex = dir; }
+    }
+
+    public readonly struct EnemyHelpAccepted
+    {
+        public readonly string ResponderId, ResponderCallsign, RequesterCallsign;
+        public EnemyHelpAccepted(string id, string responder, string requester)
+        { ResponderId = id; ResponderCallsign = responder; RequesterCallsign = requester; }
+    }
+
+    public enum SupplyKind { Ammo, Meds }
+
+    public readonly struct EnemyResupplied
+    {
+        public readonly string SquadId, Callsign;
+        public readonly NodeKind DestKind;      // City/Camp
+        public readonly string DestId, DestName;
+        public readonly SupplyKind Kind;
+        public readonly int Amount;
+        public readonly Vector2 DestPos;
+
+        public EnemyResupplied(string squadId, string callsign, NodeKind destKind, string destId, string destName,
+                               SupplyKind kind, int amount, Vector2 destPos)
+        {
+            SquadId = squadId; Callsign = callsign; DestKind = destKind; DestId = destId; DestName = destName;
+            Kind = kind; Amount = amount; DestPos = destPos;
+        }
+    }
+
     public readonly struct EnemyEngaged
     {
-        public readonly string SquadId;
-        public readonly string Callsign;
-        public readonly UnityEngine.Vector2 Pos;
-        public EnemyEngaged(string squadId, string callsign, UnityEngine.Vector2 pos)
-        { SquadId = squadId; Callsign = callsign; Pos = pos; }
+        public readonly string SquadId, Callsign;
+        public EnemyEngaged(string id, string call) { SquadId = id; Callsign = call; }
+    }
+
+    // обрати внимание: ReinforcementRequested уже есть; добавь поле CallerCallsign если ещё не было
+    public readonly struct ReinforcementRequested
+    {
+        public readonly string CallerId, CallerCallsign;
+        public readonly Vector2 Pos;
+        public readonly float Radius;
+        public ReinforcementRequested(string id, string call, Vector2 pos, float radius)
+        { CallerId = id; CallerCallsign = call; Pos = pos; Radius = radius; }
     }
 
 }

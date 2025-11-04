@@ -27,7 +27,10 @@ public class EnemyMessageComposer : MonoBehaviour
         EventBus.Subscribe<EnemyPlannedMove>(OnEnemyPlannedMove);
         EventBus.Subscribe<EnemyRetreatDeclared>(OnEnemyRetreat);
         EventBus.Subscribe<ReinforcementRequested>(OnReinforcementRequested);
-        EventBus.Subscribe<EnemyEngaged>(OnEnemyEngaged);
+        EventBus.Subscribe<EnemyHeardShots>(OnHeardShots);
+        EventBus.Subscribe<EnemyHelpAccepted>(OnHelpAccepted);
+        EventBus.Subscribe<EnemyResupplied>(OnResupplied);
+        EventBus.Subscribe<EnemyEngaged>(OnEngaged);
     }
 
     void OnDisable()
@@ -35,7 +38,10 @@ public class EnemyMessageComposer : MonoBehaviour
         EventBus.Unsubscribe<EnemyPlannedMove>(OnEnemyPlannedMove);
         EventBus.Unsubscribe<EnemyRetreatDeclared>(OnEnemyRetreat);
         EventBus.Unsubscribe<ReinforcementRequested>(OnReinforcementRequested);
-        EventBus.Unsubscribe<EnemyEngaged>(OnEnemyEngaged);
+        EventBus.Unsubscribe<EnemyHeardShots>(OnHeardShots);
+        EventBus.Unsubscribe<EnemyHelpAccepted>(OnHelpAccepted);
+        EventBus.Unsubscribe<EnemyResupplied>(OnResupplied);
+        EventBus.Unsubscribe<EnemyEngaged>(OnEngaged);
     }
 
 
@@ -104,16 +110,69 @@ public class EnemyMessageComposer : MonoBehaviour
         EventBus.Publish(new ConsoleMessage(ConsoleSender.Enemy, msg));
     }
 
-    void OnEnemyEngaged(EnemyEngaged e)
+    void OnHeardShots(EnemyHeardShots e)
     {
-        if (!phrases) return;
-        if (!Passes("engage", e.SquadId, engageCooldown, engageAnnounceChance)) return;
+        if (!CanSpeak(e.SquadId)) return; // твой кулдаун
+        var p = bank; // PhraseBank
+        string prefix = p.Pick(p.enemyPrefixes);
+        string dir = p.dir8[e.DirIndex];
+        SayEnemy($"{prefix}, это {e.Callsign}. Слышали выстрелы на {dir} от нас, выдвигаемся на проверку.",
+                 p.enemyHeardShots, ("prefix", prefix), ("call", e.Callsign), ("dir", dir));
+    }
 
-        string prefix = phrases.Pick(phrases.enemyPrefixes);
-        string msg = phrases.Pick(phrases.enemyEngage)
-                             .Replace("{prefix}", prefix)
-                             .Replace("{call}", e.Callsign);
-        EventBus.Publish(new ConsoleMessage(ConsoleSender.Enemy, msg));
+    void OnHelpAccepted(EnemyHelpAccepted e)
+    {
+        if (!CanSpeak(e.ResponderId)) return;
+        var p = bank;
+        string text = p.Pick(p.enemyHelpAck)
+            .Replace("{requester}", e.RequesterCallsign)
+            .Replace("{call}", e.ResponderCallsign);
+        PostEnemy(text);
+    }
+
+    void OnResupplied(EnemyResupplied e)
+    {
+        if (!CanSpeak(e.SquadId)) return;
+        var p = bank;
+        string prefix = p.Pick(p.enemyPrefixes);
+
+        if (e.DestKind == NodeKind.City)
+        {
+            string what = e.Kind == SupplyKind.Ammo ? p.ammoNames[0] : p.hpNames[0];
+            string tpl = p.Pick(p.enemyResupplyCity);
+            PostEnemy(tpl.Replace("{prefix}", prefix)
+                         .Replace("{call}", e.Callsign)
+                         .Replace("{what}", what)
+                         .Replace("{amount}", e.Amount.ToString())
+                         .Replace("{city}", e.DestName));
+        }
+        else // Camp: ищем ближайший город и направление
+        {
+            var ws = WorldState.Instance; var city = FindNearestCity(ws, e.DestPos);
+            int dirIdx = Dir8Index(city.Pos, e.DestPos); // лагерь относительно города
+            string dir = p.dir8Locative[dirIdx];
+            string what = e.Kind == SupplyKind.Ammo ? p.ammoNames[0] : p.hpNames[0];
+
+            string tpl = p.Pick(p.enemyResupplyCampRelative);
+            PostEnemy(tpl.Replace("{prefix}", prefix)
+                         .Replace("{call}", e.Callsign)
+                         .Replace("{what}", what)
+                         .Replace("{amount}", e.Amount.ToString())
+                         .Replace("{camp}", e.DestName)
+                         .Replace("{dir}", dir)
+                         .Replace("{city}", city.Name));
+        }
+    }
+
+    void OnEngaged(EnemyEngaged e)
+    {
+        if (!CanSpeak(e.SquadId)) return;
+        var p = bank;
+        string prefix = p.Pick(p.enemyPrefixes);
+        string msg = p.Pick(p.enemyEngage)
+            .Replace("{prefix}", prefix)
+            .Replace("{call}", e.Callsign);
+        PostEnemy(msg);
     }
 
     // ---------- cooldown utils ----------

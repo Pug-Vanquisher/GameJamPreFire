@@ -269,6 +269,7 @@ public class CommandConsoleUI : MonoBehaviour
         }
 
         PlayerWeaponState.TrySpend(spentReq);
+        EventBus.Publish(new PlayerFired(PlayerState.Pos));
         EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
             $"Огонь по {t.label}: расход {spentReq}. {PlayerWeaponState.InMag}/{PlayerWeaponState.MagSize} в магазине."));
 

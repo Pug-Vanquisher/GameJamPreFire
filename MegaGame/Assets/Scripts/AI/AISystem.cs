@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Events;
 
@@ -7,68 +8,78 @@ public class AISystem : MonoBehaviour
     [Header("Tick")]
     [SerializeField] private float tickHz = 5f;
 
-    [Header("Balance")]
+    [Header("Engage / Pursue")]
     [SerializeField] private float pursueTimeCoward = 3f;
     [SerializeField] private float pursueTimeNeutral = 7f;
     [SerializeField] private float pursueTimeAggro = 12f;
-
-    [Header("Combat behavior")]
-    [SerializeField] private float engageStandOff = 250f;      // на этой дистанции «держим круг»
-    [SerializeField] private float strafeLateralSpeed = 0.45f; // боковая скорость при страйфе (в долях Speed)
-    [SerializeField] private float strafeJitterAmplitude = 8f; // случайное дрожание при страйфе
+    [SerializeField] private float engageStandOff = 250f;      // дистанция «держим круг»
+    [SerializeField] private float strafeLateralSpeed = 0.45f; // поперечная скорость (доля Speed)
+    [SerializeField] private float strafeJitterAmplitude = 8f; // дрожание
 
     [Header("Separation")]
     [SerializeField] private float separationRadius = 100f;
     [SerializeField] private float separationPushPerSecond = 250f;
 
     [Header("Shooting")]
-    [SerializeField] private Vector2 shotInterval = new Vector2(1.2f, 2.2f); // интервал между выстрелами одного отряда
-    [SerializeField, Range(0f, 1f)] private float enemyHitChance = 0.35f;     // шанс попадания
-    [SerializeField] private Vector2Int baseDamage = new Vector2Int(4, 9);   // базовый урон (до Firepower)
-    [SerializeField] private float damageMultiplier = 1.0f;                   // общий множитель сложности
-    [SerializeField] private int maxShotsPerTick = 2;                         // ограничитель "одновременности"
-    [SerializeField] private float initialStaggerMax = 0.7f;                  // рассинхрон стартовых фаз, сек
-
-    // таймеры пер-отряд
-    readonly Dictionary<string, float> nextFireAt = new Dictionary<string, float>();
+    [SerializeField] private Vector2 shotInterval = new Vector2(1.2f, 2.2f); // интервал для отряда
+    [SerializeField, Range(0f, 1f)] private float enemyHitChance = 0.35f;
+    [SerializeField] private Vector2Int baseDamage = new Vector2Int(4, 9);
+    [SerializeField] private float damageMultiplier = 1.0f;
+    [SerializeField] private int maxShotsPerTick = 2;
+    [SerializeField] private float initialStaggerMax = 0.7f;
 
     [Header("Limits")]
-    [SerializeField] private int maxMobilePerRegion = 5; // без учёта гарнизона
-    [SerializeField] private int maxChasers = 5; // не более N одновременно «пасут» игрока
+    [SerializeField] private int maxMobilePerRegion = 5; // без гарнизонов
+    [SerializeField] private int maxChasers = 5;         // кто одновременно «пасёт» игрока
 
-    [Header("Reinforcement / Help")]
-    [SerializeField] private float helpBroadcastRadius = 2500f; // в каком радиусе слышно «запрос помощи»
-    [SerializeField] private float helpResponseRadius = 2500f; // радиус, в котором отряды рассматривают отклик
-    [SerializeField] private float helpPursueTime = 12f;   // сколько секунд «ищем» игрока на точке
-    [SerializeField, Range(0, 1)] private float cowardRetreatProb = 0.70f; // трус отступит с таким шансом
+    [Header("Help / Reinforcement")]
+    [SerializeField] private float helpBroadcastRadius = 2500f;
+    [SerializeField] private float helpResponseRadius = 2500f;
+    [SerializeField] private float helpPursueTime = 12f;        // сколько «ищем» по вызову
+    [SerializeField, Range(0, 1)] private float cowardRetreatProb = 0.70f;
+
+    [Header("React to shots")]
+    [SerializeField] private float hearShotRadius = 2200f;
+    [SerializeField, Range(0, 1)] private float hearShotRespondProb = 0.50f; // базовый шанс
+    [SerializeField] private float investigateTime = 8f;                     // сколько «проверяем точку»
+
+    [Header("Resupply on arrival")]
+    [SerializeField, Range(0, 1)] private float resupplyProb = 0.25f; // шанс пополнить
+    [SerializeField] private Vector2Int resupplyAmmoRange = new Vector2Int(6, 14);
+    [SerializeField] private Vector2Int resupplyMedsRange = new Vector2Int(1, 3);
 
     [Header("Debug Movement Broadcast")]
     [SerializeField] private bool debugBroadcastMovement = true;
     [SerializeField] private float movementBroadcastHz = 3f;
-    Dictionary<string, float> lastBroadcastAt = new Dictionary<string, float>();
+
+    // таймеры стрельбы (пер-отряд)
+    private readonly Dictionary<string, float> nextFireAt = new();
+    private readonly Dictionary<string, float> lastBroadcastAt = new();
 
     class GraphEdge
     {
         public string to;
         public float w;
-        public List<Vector2> path; 
+        public List<Vector2> path;
     }
 
-    Dictionary<string, List<GraphEdge>> G; 
+    Dictionary<string, List<GraphEdge>> G;
     float tickAccum;
 
     void OnEnable()
     {
         EventBus.Subscribe<MapGenerated>(OnMapGenerated);
-        BuildGraph();
         EventBus.Subscribe<ReinforcementRequested>(OnReinforcementRequested);
         EventBus.Subscribe<SquadDied>(OnSquadDied);
+        EventBus.Subscribe<PlayerFired>(OnPlayerFired);               // << новое
+        BuildGraph();
     }
     void OnDisable()
     {
         EventBus.Unsubscribe<MapGenerated>(OnMapGenerated);
         EventBus.Unsubscribe<ReinforcementRequested>(OnReinforcementRequested);
         EventBus.Unsubscribe<SquadDied>(OnSquadDied);
+        EventBus.Unsubscribe<PlayerFired>(OnPlayerFired);
     }
 
     void OnMapGenerated(MapGenerated _)
@@ -88,7 +99,7 @@ public class AISystem : MonoBehaviour
         var ws = WorldState.Instance; if (!ws) return;
 
         void AddNode(string id) { if (!G.ContainsKey(id)) G[id] = new List<GraphEdge>(); }
-        AddNode(ws.Capital?.Id ?? "capital");
+        if (ws.Capital) AddNode(ws.Capital.Id);
         foreach (var c in ws.Cities) AddNode(c.Id);
 
         foreach (var r in ws.Roads)
@@ -121,24 +132,26 @@ public class AISystem : MonoBehaviour
         Vector2 player = PlayerState.Pos;
         float dt = 1f / Mathf.Max(1e-4f, tickHz);
 
+        // кого допускаем «в хвост»
         var allowedChasers = new HashSet<string>();
         {
             var list = new List<(SquadData s, float d)>();
             foreach (var q in ws.EnemySquads)
-                if (!q.IsGarrison)
-                {
-                    float d = Vector2.Distance(q.Pos, player);
-                    if (d <= q.DetectionRadius) list.Add((q, d));
-                }
+            {
+                if (q.IsGarrison) continue;
+                float d = Vector2.Distance(q.Pos, player);
+                if (d <= q.DetectionRadius) list.Add((q, d));
+            }
             list.Sort((a, b) => a.d.CompareTo(b.d));
             for (int i = 0; i < list.Count && i < maxChasers; i++) allowedChasers.Add(list[i].s.Id);
         }
 
         EnforceRegionCap(ws);
 
-        foreach (var s in ws.EnemySquads)
+        foreach (var s in ws.EnemySquads.ToList())
         {
             Vector2 oldPos = s.Pos;
+            bool wasInCombat = s.InCombat;
 
             // === ГАРНИЗОН ===
             if (s.IsGarrison)
@@ -148,10 +161,11 @@ public class AISystem : MonoBehaviour
                 s.State = s.InCombat ? AIState.Engage : AIState.Idle;
 
                 if (s.InCombat && shotsThisTick < maxShotsPerTick)
-                {
-                    if (TryEnemyFire(s))
-                        shotsThisTick++;
-                }
+                    if (TryEnemyFire(s)) shotsThisTick++;
+
+                // событие «вступили в бой» — фикс
+                if (!wasInCombat && s.InCombat)
+                    EventBus.Publish(new EnemyEngaged(s.Id, s.Callsign));
 
                 MaybeBroadcastMoved(s, oldPos);
                 continue;
@@ -164,7 +178,7 @@ public class AISystem : MonoBehaviour
             {
                 s.State = AIState.Engage; s.InCombat = true;
 
-                // ТРУС — может отступить, если подошёл близко
+                // трус может отступить
                 if (s.Persona == EnemyPersonality.Cowardly && distToPlayer < engageStandOff * 0.8f && Random.value < cowardRetreatProb)
                 {
                     var far = FarthestNodeFrom(player);
@@ -174,7 +188,6 @@ public class AISystem : MonoBehaviour
                         s.TargetNodeId = far.Id;
                         s.State = AIState.Return; s.InCombat = false;
                         s.Path = null; s.PathIndex = 0;
-                        // дальше не сближаемся
                     }
                 }
                 else
@@ -183,11 +196,7 @@ public class AISystem : MonoBehaviour
                     {
                         Vector2 dir = (player - s.Pos).normalized;
                         s.Pos += dir * (s.Speed * 0.6f * dt);
-                        if (shotsThisTick < maxShotsPerTick)
-                        {
-                            if (TryEnemyFire(s))
-                                shotsThisTick++;
-                        }
+                        if (shotsThisTick < maxShotsPerTick && TryEnemyFire(s)) shotsThisTick++;
                     }
                     else
                     {
@@ -195,22 +204,17 @@ public class AISystem : MonoBehaviour
                         Vector2 perp = new Vector2(-toPl.y, toPl.x).normalized;
                         s.Pos += perp * (s.Speed * strafeLateralSpeed * dt)
                               + (Vector2)Random.insideUnitCircle * strafeJitterAmplitude * dt;
-                        if (shotsThisTick < maxShotsPerTick)
-                        {
-                            if (TryEnemyFire(s))
-                                shotsThisTick++;
-                        }
+                        if (shotsThisTick < maxShotsPerTick && TryEnemyFire(s)) shotsThisTick++;
                     }
                 }
             }
             else if (distToPlayer <= s.DetectionRadius && !allowedChasers.Contains(s.Id))
             {
-                // слишком много преследователей — этот уходит к своим делам
+                // слишком много преследователей
                 s.InCombat = false;
                 if (string.IsNullOrEmpty(s.TargetNodeId)) PickNewTarget(s);
-                s.State = AIState.Return; // уводим с «хвоста»
+                s.State = AIState.Return;
             }
-
             else if (s.InCombat)
             {
                 s.InCombat = false;
@@ -221,7 +225,7 @@ public class AISystem : MonoBehaviour
                 s.State = AIState.Pursue;
             }
 
-
+            // движение вне боя
             if (!s.InCombat)
             {
                 if (s.State == AIState.Pursue)
@@ -240,12 +244,14 @@ public class AISystem : MonoBehaviour
 
                 if (s.State == AIState.Return || s.State == AIState.Patrol || s.State == AIState.Idle)
                 {
+                    // построение пути при необходимости
                     if (s.Path == null || s.PathIndex >= s.Path.Count)
                     {
                         if (string.IsNullOrEmpty(s.TargetNodeId)) PickNewTarget(s);
                         BuildPathToTarget(s);
                     }
 
+                    // движение по пути
                     if (s.Path != null && s.PathIndex < s.Path.Count)
                     {
                         Vector2 tgt = s.Path[s.PathIndex];
@@ -255,7 +261,16 @@ public class AISystem : MonoBehaviour
                         {
                             s.Pos = tgt;
                             s.PathIndex++;
-                            if (s.PathIndex >= s.Path.Count) { s.State = AIState.Patrol; s.TargetNodeId = null; }
+
+                            // цель достигнута
+                            if (s.PathIndex >= s.Path.Count)
+                            {
+                                // пробуем пополнить узел
+                                TryResupplyOnArrival(s);
+
+                                s.State = AIState.Patrol;
+                                s.TargetNodeId = null;
+                            }
                         }
                         else
                         {
@@ -266,6 +281,10 @@ public class AISystem : MonoBehaviour
             }
 
             ApplySeparation(ws, s, dt);
+
+            // событие «вступили в бой»
+            if (!wasInCombat && s.InCombat)
+                EventBus.Publish(new EnemyEngaged(s.Id, s.Callsign));
 
             MaybeBroadcastMoved(s, oldPos);
         }
@@ -283,20 +302,18 @@ public class AISystem : MonoBehaviour
             if (dist < 1e-3f) { push += (Vector2)Random.insideUnitCircle; continue; }
             if (dist < separationRadius)
             {
-                float k = (separationRadius - dist) / separationRadius; // 0..1
+                float k = (separationRadius - dist) / separationRadius;
                 push += d.normalized * k;
             }
         }
         if (push.sqrMagnitude > 1e-6f)
-        {
             s.Pos += push.normalized * (separationPushPerSecond * dt);
-        }
     }
 
     void MaybeBroadcastMoved(SquadData s, Vector2 oldPos)
     {
         if (!debugBroadcastMovement || s.IsGarrison) return;
-        if ((s.Pos - oldPos).sqrMagnitude < 0.25f) return; // мало сдвинулись
+        if ((s.Pos - oldPos).sqrMagnitude < 0.25f) return;
 
         float now = Time.time;
         float minDt = 1f / Mathf.Max(1e-3f, movementBroadcastHz);
@@ -305,6 +322,140 @@ public class AISystem : MonoBehaviour
             lastBroadcastAt[s.Id] = now;
             EventBus.Publish(new SquadMoved(s.Id, s.Pos, false));
         }
+    }
+
+    // ---------- поведение «услышали выстрелы» ----------
+    void OnPlayerFired(PlayerFired e)
+    {
+        var ws = WorldState.Instance; if (!ws) return;
+
+        foreach (var s in ws.EnemySquads)
+        {
+            if (s.IsGarrison) continue; // гарнизон стоит
+            if (s.InCombat) continue;
+
+            float d = Vector2.Distance(s.Pos, e.Pos);
+            if (d > hearShotRadius) continue;
+
+            float p = hearShotRespondProb * PersonaHearModifier(s.Persona);
+            if (Random.value > p) continue;
+
+            // сообщим направление (от отряда к месту выстрела)
+            int dir = Dir8Index(s.Pos, e.Pos);
+            EventBus.Publish(new EnemyHeardShots(s.Id, s.Callsign, dir));
+
+            // идём «проверить» — используем PursueUntil как таймер расследования
+            s.State = AIState.Pursue;
+            s.PursueUntil = Time.time + investigateTime;
+
+            // двигаемся через дорожную сеть к ближайшей к точке выстрела ноде
+            string nearNode = NearestRoadNodeId(e.Pos);
+            s.TargetNodeId = nearNode;
+            s.Path = null; s.PathIndex = 0;
+            BuildPathToTarget(s);
+        }
+    }
+
+    float PersonaHearModifier(EnemyPersonality p)
+    {
+        switch (p)
+        {
+            case EnemyPersonality.Cowardly: return 0.6f;
+            case EnemyPersonality.Aggressive: return 1.2f;
+            default: return 1.0f;
+        }
+    }
+
+    // ---------- дозаправка / пополнение при прибытии ----------
+    void TryResupplyOnArrival(SquadData s)
+    {
+        if (Random.value > resupplyProb) return;
+
+        var ws = WorldState.Instance; if (!ws) return;
+        NodeData node = null;
+        if (!string.IsNullOrEmpty(s.TargetNodeId))
+            node = ws.FindCityById(s.TargetNodeId) ?? ws.FindCampById(s.TargetNodeId);
+
+        if (node == null) return;
+
+        // что пополняем?
+        bool giveAmmo = Random.value < 0.6f;
+        int amount = giveAmmo
+            ? Random.Range(Mathf.Min(resupplyAmmoRange.x, resupplyAmmoRange.y), Mathf.Max(resupplyAmmoRange.x, resupplyAmmoRange.y) + 1)
+            : Random.Range(Mathf.Min(resupplyMedsRange.x, resupplyMedsRange.y), Mathf.Max(resupplyMedsRange.x, resupplyMedsRange.y) + 1);
+
+        if (giveAmmo) node.Ammo += amount; else node.Meds += amount;
+
+        // сообщение
+        if (node.Type == NodeType.City || node.Type == NodeType.Capital)
+        {
+            EventBus.Publish(new EnemyResupplied(
+                s.Id, s.Callsign, NodeKind.City, node.Id, node.Name,
+                giveAmmo ? SupplyKind.Ammo : SupplyKind.Meds, amount, node.Pos
+            ));
+        }
+        else // лагерь — с привязкой к ближайшему городу
+        {
+            EventBus.Publish(new EnemyResupplied(
+                s.Id, s.Callsign, NodeKind.Camp, node.Id, node.Name,
+                giveAmmo ? SupplyKind.Ammo : SupplyKind.Meds, amount, node.Pos
+            ));
+        }
+    }
+
+    // ---------- усиление/ограничения ----------
+    void EnforceRegionCap(WorldState ws)
+    {
+        var byRegion = new Dictionary<int, List<SquadData>>();
+        foreach (var s in ws.EnemySquads)
+            if (!s.IsGarrison)
+            {
+                int rid = CurrentRegionId(s.Pos);
+                if (!byRegion.TryGetValue(rid, out var lst)) { lst = new List<SquadData>(); byRegion[rid] = lst; }
+                lst.Add(s);
+            }
+
+        foreach (var kv in byRegion)
+        {
+            var lst = kv.Value;
+            if (lst.Count <= maxMobilePerRegion) continue;
+
+            // избыточных уводим в другие регионы
+            for (int i = maxMobilePerRegion; i < lst.Count; i++)
+            {
+                var s = lst[i];
+                var dest = PickDestOutsideRegion(ws, kv.Key);
+                if (dest != null)
+                {
+                    s.TargetNodeId = dest.Id;
+                    s.State = AIState.Return; s.InCombat = false;
+                    s.Path = null; s.PathIndex = 0;
+                    PublishMoveIntent(s, dest);
+                }
+            }
+        }
+    }
+
+    int CurrentRegionId(Vector2 p)
+    {
+        var ws = WorldState.Instance; if (!ws) return -1;
+        int bestRegion = ws.Capital ? ws.Capital.RegionId : -1;
+        float bestD = ws.Capital ? Vector2.Distance(p, ws.Capital.Pos) : float.MaxValue;
+        foreach (var c in ws.Cities)
+        {
+            float d = Vector2.Distance(p, c.Pos);
+            if (d < bestD) { bestD = d; bestRegion = c.RegionId; }
+        }
+        return bestRegion;
+    }
+
+    NodeData PickDestOutsideRegion(WorldState ws, int regionId)
+    {
+        var candidates = new List<NodeData>();
+        foreach (var c in ws.Cities) if (c.RegionId != regionId) candidates.Add(c);
+        foreach (var k in ws.Camps) if (k.RegionId != regionId) candidates.Add(k);
+        if (candidates.Count == 0) return null;
+        return candidates[Random.Range(0, candidates.Count)];
     }
 
     void PickNewTarget(SquadData s)
@@ -321,46 +472,37 @@ public class AISystem : MonoBehaviour
         if (dest != null)
         {
             s.TargetNodeId = dest.Id;
-            PublishMoveIntent(s, dest); // 10% шанс вывода решит композер
+            PublishMoveIntent(s, dest); // композер сам решит по вероятности
         }
     }
 
-    // строим путь: по дорогам между узлами; если цель лагерь — последняя нога off-road
     void BuildPathToTarget(SquadData s)
     {
         var ws = WorldState.Instance; if (!ws) return;
         NodeData target = ws.FindCityById(s.TargetNodeId) ?? ws.FindCampById(s.TargetNodeId);
         if (target == null) { s.Path = null; return; }
 
-        // стартовый/конечный узлы дорожной сети: capital+cities
         string startNodeId = NearestRoadNodeId(s.Pos);
-        string endNodeId = (target.Type == NodeType.City || target.Type == NodeType.Capital)
-            ? target.Id
-            : NearestRoadNodeId(target.Pos);
+        string endNodeId = (target.Type == NodeType.City || target.Type == NodeType.Capital) ? target.Id : NearestRoadNodeId(target.Pos);
 
         var path = new List<Vector2>();
 
-        // если мы не у узла — добавим «подход» к ближайшему узлу сети
         if (!string.IsNullOrEmpty(startNodeId))
         {
-            var startNode = (startNodeId == ws.Capital.Id) ? ws.Capital : ws.FindCityById(startNodeId);
+            var startNode = (startNodeId == ws.Capital?.Id) ? ws.Capital : ws.FindCityById(startNodeId);
             if (startNode != null) path.AddRange(StraightLeg(s.Pos, startNode.Pos));
         }
 
-        // по дорожному графу
         var polyline = ShortestPolyline(startNodeId, endNodeId);
         if (polyline != null && polyline.Count > 0)
         {
-            if (path.Count > 0 && (path[path.Count - 1] - polyline[0]).sqrMagnitude < 0.1f) { }
-            else if (polyline.Count > 0) path.Add(polyline[0]);
+            if (path.Count == 0 || (path[path.Count - 1] - polyline[0]).sqrMagnitude >= 0.01f)
+                path.Add(polyline[0]);
             for (int i = 1; i < polyline.Count; i++) path.Add(polyline[i]);
         }
 
-        // если цель лагерь — off-road от узла к лагерю
         if (target.Type == NodeType.Camp)
-        {
-            path.AddRange(StraightLeg(path.Count > 0 ? path[path.Count - 1] : s.Pos, target.Pos));
-        }
+            path.AddRange(StraightLeg(path.Count > 0 ? path[^1] : s.Pos, target.Pos));
 
         s.Path = path;
         s.PathIndex = 0;
@@ -378,10 +520,11 @@ public class AISystem : MonoBehaviour
         return bestId;
     }
 
-    // простая Dijkstra по G, возвращает склеенную polyline
     List<Vector2> ShortestPolyline(string fromId, string toId)
     {
-        if (string.IsNullOrEmpty(fromId) || string.IsNullOrEmpty(toId) || fromId == toId || G == null) return new List<Vector2>();
+        if (string.IsNullOrEmpty(fromId) || string.IsNullOrEmpty(toId) || fromId == toId || G == null)
+            return new List<Vector2>();
+
         var dist = new Dictionary<string, float>();
         var prev = new Dictionary<string, (string node, List<Vector2> path)>();
         var pq = new SortedList<float, string>();
@@ -406,7 +549,7 @@ public class AISystem : MonoBehaviour
                     }
                     dist[e.to] = nd;
                     prev[e.to] = (cur, e.path);
-                    pq.Add(nd + Random.value * 1e-4f, e.to); // небольшой шум для уникальности ключа
+                    pq.Add(nd + Random.value * 1e-4f, e.to); // шум для уникальности ключа
                 }
             }
         }
@@ -425,23 +568,17 @@ public class AISystem : MonoBehaviour
         while (stack.Count > 0)
         {
             var seg = stack.Pop();
-            if (result.Count == 0) { result.AddRange(seg); }
+            if (result.Count == 0) result.AddRange(seg);
             else
             {
-                // склеиваем, избегая дубликата стыка
-                if ((result[result.Count - 1] - seg[0]).sqrMagnitude < 0.01f) { }
-                else result.Add(seg[0]);
+                if ((result[^1] - seg[0]).sqrMagnitude >= 0.01f) result.Add(seg[0]);
                 for (int i = 1; i < seg.Count; i++) result.Add(seg[i]);
             }
         }
         return result;
     }
 
-    List<Vector2> StraightLeg(Vector2 a, Vector2 b)
-    {
-        // короткая прямая (2 точки). Можно нарезать чаще, если нужно.
-        return new List<Vector2> { a, b };
-    }
+    List<Vector2> StraightLeg(Vector2 a, Vector2 b) => new() { a, b };
 
     public static bool KillSquadById(string squadId, Vector2? posOverride = null)
     {
@@ -454,7 +591,6 @@ public class AISystem : MonoBehaviour
 
         ws.EnemySquads.RemoveAt(idx);
 
-        // уведомления
         EventBus.Publish(new SquadDied(s.Id, s.Callsign, s.IsGarrison, s.AnchorNodeId, p));
 
         if (s.IsGarrison && !string.IsNullOrEmpty(s.AnchorNodeId))
@@ -463,70 +599,6 @@ public class AISystem : MonoBehaviour
             EventBus.Publish(new GarrisonCountChanged(s.AnchorNodeId, left));
         }
         return true;
-    }
-
-    int CurrentRegionId(Vector2 p)
-    {
-        // При отсутствии быстрых семплеров региона — берём регион ближайшего города/столицы
-        var ws = WorldState.Instance; if (!ws) return -1;
-        int bestRegion = ws.Capital != null ? ws.Capital.RegionId : -1;
-        float bestD = ws.Capital != null ? Vector2.Distance(p, ws.Capital.Pos) : float.MaxValue;
-        foreach (var c in ws.Cities)
-        {
-            float d = Vector2.Distance(p, c.Pos);
-            if (d < bestD) { bestD = d; bestRegion = c.RegionId; }
-        }
-        return bestRegion;
-    }
-
-    void EnforceRegionCap(WorldState ws)
-    {
-        var byRegion = new Dictionary<int, List<SquadData>>();
-        foreach (var s in ws.EnemySquads)
-            if (!s.IsGarrison)
-            {
-                int rid = CurrentRegionId(s.Pos);
-                if (!byRegion.TryGetValue(rid, out var lst)) { lst = new List<SquadData>(); byRegion[rid] = lst; }
-                lst.Add(s);
-            }
-
-        foreach (var kv in byRegion)
-        {
-            var lst = kv.Value;
-            if (lst.Count <= maxMobilePerRegion) continue;
-
-            // избыточных отправим в другие регионы
-            for (int i = maxMobilePerRegion; i < lst.Count; i++)
-            {
-                var s = lst[i];
-                // выберем любую цель в другом регионе
-                var dest = PickDestOutsideRegion(ws, kv.Key);
-                if (dest != null)
-                {
-                    s.TargetNodeId = dest.Id;
-                    s.State = AIState.Return;
-                    s.InCombat = false;
-                    s.Path = null; s.PathIndex = 0;
-                    PublishMoveIntent(s, dest);
-                }
-            }
-        }
-    }
-
-    NodeData PickDestOutsideRegion(WorldState ws, int regionId)
-    {
-        var candidates = new List<NodeData>();
-        foreach (var c in ws.Cities) if (c.RegionId != regionId) candidates.Add(c);
-        foreach (var k in ws.Camps) if (k.RegionId != regionId) candidates.Add(k);
-        if (candidates.Count == 0) return null;
-        return candidates[Random.Range(0, candidates.Count)];
-    }
-
-    void PublishMoveIntent(SquadData s, NodeData dest)
-    {
-        if (dest == null) return;
-        var kind = (dest.Type == NodeType.Camp) ? NodeKind.Camp : NodeKind.City;
-        EventBus.Publish(new EnemyPlannedMove(s.Id, s.Callsign, kind, dest.Id, dest.Name, dest.Pos));
     }
 
     NodeData FarthestNodeFrom(Vector2 p)
@@ -546,11 +618,25 @@ public class AISystem : MonoBehaviour
         return best;
     }
 
+    void PublishMoveIntent(SquadData s, NodeData dest)
+    {
+        if (dest == null) return;
+        var kind = (dest.Type == NodeType.Camp) ? NodeKind.Camp : NodeKind.City;
+        EventBus.Publish(new EnemyPlannedMove(s.Id, s.Callsign, kind, dest.Id, dest.Name, dest.Pos));
+    }
+
+    int Dir8Index(Vector2 from, Vector2 to)
+    {
+        Vector2 d = to - from; if (d.sqrMagnitude < 1e-6f) return 0;
+        float ang = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; if (ang < 0f) ang += 360f;
+        return Mathf.RoundToInt(ang / 45f) & 7;
+    }
+
+    // помощь: запрос и отклик
     void OnSquadDied(SquadDied e)
     {
         var ws = WorldState.Instance; if (!ws) return;
 
-        // выбираем ближайшего ЖИВОГО союзника как "запрашивающего" (может быть гарнизоном)
         SquadData requester = null; float best = float.MaxValue;
         foreach (var s in ws.EnemySquads)
         {
@@ -559,7 +645,6 @@ public class AISystem : MonoBehaviour
         }
         if (requester == null || best > helpBroadcastRadius) return;
 
-        // 70% шанс запросить помощь
         if (Random.value < 0.70f)
         {
             EventBus.Publish(new ReinforcementRequested(requester.Id, requester.Callsign, e.Pos, helpResponseRadius));
@@ -571,14 +656,16 @@ public class AISystem : MonoBehaviour
         var ws = WorldState.Instance; if (!ws) return;
         foreach (var s in ws.EnemySquads)
         {
-            if (s.IsGarrison) continue; // гарнизон стоит, но просить помощь может — уже обработано выше
+            if (s.IsGarrison) continue;
             float d = Vector2.Distance(s.Pos, e.Pos);
             if (d > e.Radius) continue;
 
             float resp = PersonaRespondChance(s.Persona);
             if (Random.value <= resp)
             {
-                // идём к точке запроса (через ближайший узел), потом преследуем N секунд
+                // сообщение «принял, иду на помощь»
+                EventBus.Publish(new EnemyHelpAccepted(s.Id, s.Callsign, e.CallerCallsign));
+
                 s.State = AIState.Pursue;
                 s.PursueUntil = Time.time + helpPursueTime;
                 string nearest = NearestRoadNodeId(e.Pos);
@@ -590,41 +677,33 @@ public class AISystem : MonoBehaviour
     }
 
     float PersonaRespondChance(EnemyPersonality p)
-    {
-        switch (p)
+        => p switch
         {
-            case EnemyPersonality.Cowardly: return 0.30f;
-            case EnemyPersonality.Aggressive: return 0.85f;
-            default: return 0.55f; // Neutral
-        }
-    }
+            EnemyPersonality.Cowardly => 0.30f,
+            EnemyPersonality.Aggressive => 0.85f,
+            _ => 0.55f
+        };
 
     bool TryEnemyFire(SquadData s)
     {
         float now = Time.time;
 
-        // инициализация стартовой фазы (рассинхрон)
         if (!nextFireAt.ContainsKey(s.Id))
-            nextFireAt[s.Id] = now + UnityEngine.Random.Range(0f, initialStaggerMax);
+            nextFireAt[s.Id] = now + Random.Range(0f, initialStaggerMax);
 
-        // ещё не время стрелять?
         if (now < nextFireAt[s.Id]) return false;
 
-        // назначим следующий выстрел заранее (чтобы даже при пропуске кадра рассинхрон сохранялся)
-        float nextDt = Mathf.Clamp(UnityEngine.Random.Range(shotInterval.x, shotInterval.y), 0.05f, 99f);
+        float nextDt = Mathf.Clamp(Random.Range(shotInterval.x, shotInterval.y), 0.05f, 99f);
         nextFireAt[s.Id] = now + nextDt;
 
-        // шанс попадания
-        bool hit = UnityEngine.Random.value < enemyHitChance;
-        if (!hit) return true; // выстрел был, просто мимо
+        bool hit = Random.value < enemyHitChance;
+        if (!hit) return true;
 
-        // урон = базовый * Firepower * глобальный множитель + округление
-        int baseDmg = UnityEngine.Random.Range(Mathf.Min(baseDamage.x, baseDamage.y), Mathf.Max(baseDamage.x, baseDamage.y) + 1);
+        int baseDmg = Random.Range(Mathf.Min(baseDamage.x, baseDamage.y), Mathf.Max(baseDamage.x, baseDamage.y) + 1);
         float scaled = baseDmg * Mathf.Max(0.1f, s.Firepower) * Mathf.Max(0.1f, damageMultiplier);
         int finalDmg = Mathf.Max(1, Mathf.RoundToInt(scaled));
 
-        PlayerInventory.Damage(finalDmg); // вызовет PlayerDamaged/PlayerDied события
-
+        PlayerInventory.Damage(finalDmg);
         return true;
     }
 }

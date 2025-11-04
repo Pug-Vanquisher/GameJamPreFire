@@ -1,6 +1,6 @@
-﻿// ConsoleLogUI.cs — стабильная виртуализация: суффиксные суммы + бинпоиск, без трюков с RectTransform
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using TMPro;
 using UnityEngine;
 using Events;
@@ -8,56 +8,61 @@ using Events;
 public class ConsoleLogUI : MonoBehaviour
 {
     [Header("UI")]
-    [SerializeField] private TMP_Text screen;           // один TextMeshProUGUI в рамке консоли
+    [SerializeField] private TMP_Text screen;        // видимый TextMeshProUGUI
+    [Tooltip("Необязательный скрытый текст для измерения. Если пусто — создадим автоматом.")]
+    [SerializeField] private TMP_Text meter;         // скрытый измеритель lineCount
     [SerializeField] private bool wordWrap = true;
+
+    [Header("Manual window (lines)")]
+    [Tooltip("Сколько визуальных строк помещаем в окно (с учётом переноса). Прогресс занимает 1 строку.")]
+    [SerializeField, Min(1)] private int visibleLines = 12;
+    [Tooltip("Шаг прокрутки по строкам (NumPad 8/2, [9]/[6]).")]
+    [SerializeField, Min(1)] private int scrollStepLines = 4;
 
     [Header("Colors")]
     [SerializeField] private Color robotColor = new(0.55f, 0.95f, 0.55f, 1f);
     [SerializeField] private Color enemyColor = new(0.95f, 0.45f, 0.45f, 1f);
     [SerializeField] private Color worldColor = Color.white;
 
-    [Header("Behavior")]
+    [Header("History")]
     [SerializeField] private int maxHistory = 800;
-    [SerializeField] private float scrollStepKeypadPx = 48f;   // NumPad 8/2
-    [SerializeField] private float scrollStepMenuFactor = 0.5f;// [9]/[6] — доля экрана
-    [SerializeField] private float overscanPx = 4f;            // маленький запас, чтобы точно «добить» окно
 
     [Header("Progress bar")]
     [SerializeField] private int progressWidth = 22;
 
     // данные
-    private readonly List<string> lines = new(); // rich text
-    private readonly List<float> heights = new(); // высота каждой строки при текущей ширине
-    private readonly List<float> suf = new(); // суффиксные суммы: sum h[i..N-1]
-    private float viewW = -1f, viewH = -1f;        // размеры поля вывода
-    private float scrollFromBottom = 0f;           // 0 — у самого низа; >0 — прокручено вверх (px)
-    private bool stickToBottom = true;
+    private readonly List<string> entries = new(); // rich-тексты
+    private readonly List<int> entryLines = new(); // визуальные строки каждого entry
+    private int tailSkipLines = 0;                 // сколько строк «от низа» скрываем (скролл)
+    private bool stickToBottom = true;             // прилипание к низу
 
-    // прогресс длительной команды
+    // прогресс команды
     private bool progActive;
     private float progStart, progDur;
     private string progTitle = "";
-    private float cachedProgressH = -1f;
 
-    string Hex(Color c) => ColorUtility.ToHtmlStringRGB(c);
-    string robotHex, enemyHex, worldHex;
+    // кеши
+    private float lastWidth = -1f;
+    private string robotHex, enemyHex, worldHex;
 
     void Awake()
     {
         if (!screen) screen = GetComponentInChildren<TMP_Text>();
-        robotHex = Hex(robotColor); enemyHex = Hex(enemyColor); worldHex = Hex(worldColor);
+        robotHex = ColorUtility.ToHtmlStringRGB(robotColor);
+        enemyHex = ColorUtility.ToHtmlStringRGB(enemyColor);
+        worldHex = ColorUtility.ToHtmlStringRGB(worldColor);
 
-        if (screen)
-        {
-            screen.richText = true;
-            screen.enableWordWrapping = wordWrap;
-            screen.overflowMode = TextOverflowModes.Overflow;
-            screen.alignment = TextAlignmentOptions.TopLeft;
-        }
+        // базовые настройки видимого текста
+        screen.richText = true;
+        screen.enableWordWrapping = wordWrap;
+        screen.overflowMode = TextOverflowModes.Overflow;
+        screen.alignment = TextAlignmentOptions.TopLeft;
 
-        CacheViewSize();
-        RebuildAllMetrics();
-        RenderVisible(forceBottom: true);
+        // подготовим измеритель
+        SetupMeter();
+
+        RecalculateAllLineCounts();
+        RenderWindow(forceBottom: true);
     }
 
     void OnEnable()
@@ -81,34 +86,39 @@ public class ConsoleLogUI : MonoBehaviour
     {
         if (!screen) return;
 
-        // динамика размеров world-canvas → пересчёт метрик
-        if (CacheViewSize())
+        // реагируем на изменение ширины (world canvas масштабы и т.п.)
+        float w = Mathf.Max(1f, screen.rectTransform.rect.width);
+        if (!Mathf.Approximately(w, lastWidth))
         {
-            RebuildAllMetrics();
-            RenderVisible();
+            lastWidth = w;
+            SyncMeterWidth();
+            RecalculateAllLineCounts();
+            ClampScroll();
+            RenderWindow();
         }
 
-        // NumPad: 8 — вверх; 2 — вниз
-        if (Input.GetKeyDown(KeyCode.Keypad8)) ScrollPixels(+scrollStepKeypadPx);
-        if (Input.GetKeyDown(KeyCode.Keypad2)) ScrollPixels(-scrollStepKeypadPx);
+        // NumPad: 8 — вверх, 2 — вниз (но блокируем при выполнении команды)
+        if (!progActive)
+        {
+            if (Input.GetKeyDown(KeyCode.Keypad8)) ScrollUp(scrollStepLines);
+            if (Input.GetKeyDown(KeyCode.Keypad2)) ScrollDown(scrollStepLines);
+        }
 
-        if (progActive) RenderVisible(); // анимация прогресса
+        if (progActive) RenderWindow(); // двигаем индикатор прогресса
     }
 
-    // ===== события =====
+    // ---------- EVENTS ----------
 
     void OnRunStarted(RunStarted _)
     {
-        lines.Clear();
-        heights.Clear();
-        suf.Clear();
-        scrollFromBottom = 0f;
+        entries.Clear();
+        entryLines.Clear();
+        tailSkipLines = 0;
         stickToBottom = true;
         progActive = false; progDur = 0f; progTitle = "";
-        cachedProgressH = -1f;
 
-        RebuildAllMetrics();
-        RenderVisible(forceBottom: true);
+        RecalculateAllLineCounts();
+        RenderWindow(forceBottom: true);
 
         EventBus.Publish(new ConsoleMessage(ConsoleSender.World, "Новый забег начат."));
     }
@@ -122,180 +132,217 @@ public class ConsoleLogUI : MonoBehaviour
             ConsoleSender.Enemy => enemyHex,
             _ => worldHex
         };
-        string line = $"<color=#{hex}>[{ts}] {Escape(e.Text)}</color>";
+        string msg = $"<color=#{hex}>[{ts}] {Escape(e.Text)}</color>";
 
-        lines.Add(line);
-        if (lines.Count > maxHistory)
+        entries.Add(msg);
+        if (entries.Count > maxHistory)
         {
-            lines.RemoveAt(0);
-            if (heights.Count > 0) heights.RemoveAt(0);
+            int cut = entries.Count - maxHistory;
+            entries.RemoveRange(0, cut);
+            if (entryLines.Count >= cut) entryLines.RemoveRange(0, cut);
+            // подрезаем и скролл
+            ClampScroll();
         }
 
-        heights.Add(MeasureHeight(line));
-        RebuildSuffix(); // обновили suf под новую высоту
+        int linesAdded = MeasureLines(msg);
+        entryLines.Add(linesAdded);
 
-        RenderVisible(forceBottom: stickToBottom); // если у низа — прилипнуть к низу
+        // Если выполняется команда — всегда держимся у низа и не даём скроллить
+        if (progActive)
+        {
+            tailSkipLines = 0;
+            stickToBottom = true;
+        }
+        else
+        {
+            // Если НЕ у низа — сохраняем визуальную позицию (добавляя новые линии к смещению)
+            if (!stickToBottom && tailSkipLines > 0)
+                tailSkipLines += linesAdded;
+            else
+                tailSkipLines = 0; // прилипание к низу
+        }
+
+        ClampScroll();
+        RenderWindow();
     }
 
     void OnScrollRequest(ConsoleScrollRequest rq)
     {
-        float step = Mathf.Max(8f, viewH * Mathf.Abs(scrollStepMenuFactor));
-        ScrollPixels(rq.Delta > 0 ? +step : -step);
+        // ВАЖНО: [9] — вверх, [6] — вниз. Игнорируем во время прогресса.
+        if (progActive) return;
+
+        if (rq.Delta > 0) ScrollUp(scrollStepLines * 2);   // вверх (к старым логам)
+        else ScrollDown(scrollStepLines * 2); // вниз (к новым)
     }
 
     void OnCmdStart(CommandExecutionStarted e)
     {
+        // При запуске команды: уходим вниз, блокируем прокрутку до завершения
         progActive = true;
         progStart = Time.time;
         progDur = Mathf.Max(0.01f, e.Duration);
         progTitle = e.Title ?? "";
-        cachedProgressH = -1f;
-        RenderVisible();
+        tailSkipLines = 0;
+        stickToBottom = true;
+        RenderWindow(forceBottom: true);
     }
+
     void OnCmdFinish(CommandExecutionFinished _)
     {
+        // После завершения: снова вниз и показываем результат в самом низу
         progActive = false; progDur = 0f; progTitle = "";
-        cachedProgressH = -1f;
-        RenderVisible(forceBottom: true);
+        tailSkipLines = 0;
+        stickToBottom = true;
+        ClampScroll();
+        RenderWindow(forceBottom: true);
     }
 
-    // ===== виртуализация / скролл =====
+    // ---------- CORE: manual window by lines ----------
 
-    void ScrollPixels(float deltaUp)
+    void RenderWindow(bool forceBottom = false)
     {
-        // deltaUp > 0 — прокрутить ВВЕРХ (увеличиваем offset от низа)
-        stickToBottom = false;
-        float maxOffset = Mathf.Max(0f, TotalContentHeight() - viewH);
-        scrollFromBottom = Mathf.Clamp(scrollFromBottom + deltaUp, 0f, maxOffset);
-        if (Mathf.Approximately(scrollFromBottom, 0f)) stickToBottom = true;
-        RenderVisible();
-    }
+        if (forceBottom) { tailSkipLines = 0; stickToBottom = true; }
 
-    void RenderVisible(bool forceBottom = false)
-    {
-        if (!screen) return;
+        int totalVisual = TotalLines() + (progActive ? 1 : 0);
+        int windowLines = Mathf.Max(1, visibleLines);
+        int payloadLines = Mathf.Max(0, windowLines - (progActive ? 1 : 0));
 
-        float totalH = TotalContentHeight();
-        float maxOffset = Mathf.Max(0f, totalH - viewH);
-        if (forceBottom) { scrollFromBottom = 0f; stickToBottom = true; }
-        else { scrollFromBottom = Mathf.Clamp(scrollFromBottom, 0f, maxOffset); }
+        // ограничим скролл
+        int maxSkip = Mathf.Max(0, totalVisual - windowLines);
+        tailSkipLines = Mathf.Clamp(tailSkipLines, 0, maxSkip);
 
-        float progH = progActive ? ProgressHeight() : 0f;
-        float target = Mathf.Max(0f, viewH - progH) + scrollFromBottom + overscanPx;
-
-        // если нет строк — рисуем только прогресс при необходимости
-        if (lines.Count == 0)
+        // вычисляем старт по «линиям от низа»
+        int startIdx = entries.Count - 1;
+        int toSkip = tailSkipLines;
+        for (int i = entries.Count - 1; i >= 0 && toSkip > 0; i--)
         {
-            if (progActive)
-            {
-                screen.text = ProgressLine();
-            }
-            else screen.text = "";
-            return;
+            toSkip -= entryLines[i];
+            startIdx = i - 1;
+        }
+        if (startIdx < -1) startIdx = -1;
+
+        // набираем окно на payloadLines линий
+        var stack = new Stack<string>();
+        int taken = 0;
+        for (int i = startIdx; i >= 0 && taken < payloadLines; i--)
+        {
+            stack.Push(entries[i]);
+            taken += entryLines[i];
         }
 
-        // суффиксные суммы: suf[i] = sum(h[i..N-1]); монотонно убывает при i++
-        // нам нужен минимальный i, такой что suf[i] >= target (т.е. блок i..N-1 заполняет окно с учётом скролла)
-        int i = FindStartIndexBySuffix(target);
-        if (i < 0) i = 0;
-
-        var sb = new System.Text.StringBuilder(512);
-        for (int k = i; k < lines.Count; k++)
-            sb.AppendLine(lines[k]);
-
-        if (progActive) sb.AppendLine(ProgressLine());
+        var sb = new StringBuilder(512);
+        foreach (var line in stack) sb.AppendLine(line);
+        if (progActive) sb.AppendLine(ProgressLine(ProgressT()));
 
         screen.text = sb.ToString();
+
+        stickToBottom = (tailSkipLines == 0);
     }
 
-    int FindStartIndexBySuffix(float need)
-    {
-        // бинпоиск по убывающему suf: ищем минимальный i с suf[i] >= need
-        int n = suf.Count; if (n == 0) return -1;
-        int lo = 0, hi = n - 1, ans = n - 1;
+    // ---------- scroll helpers (чётное направление) ----------
 
-        while (lo <= hi)
-        {
-            int mid = (lo + hi) >> 1;
-            if (suf[mid] >= need) { ans = mid; hi = mid - 1; }
-            else lo = mid + 1;
-        }
-        return ans;
+    void ScrollUp(int lines)   // к старым логам
+    {
+        if (lines <= 0) return;
+        int maxSkip = Mathf.Max(0, TotalLines() + (progActive ? 1 : 0) - visibleLines);
+        tailSkipLines = Mathf.Clamp(tailSkipLines + lines, 0, maxSkip);
+        stickToBottom = (tailSkipLines == 0);
+        RenderWindow();
+    }
+    void ScrollDown(int lines) // к новым логам
+    {
+        if (lines <= 0) return;
+        tailSkipLines = Mathf.Max(0, tailSkipLines - lines);
+        stickToBottom = (tailSkipLines == 0);
+        RenderWindow();
     }
 
-    // ===== измерения / метрики =====
-
-    bool CacheViewSize()
+    int TotalLines()
     {
-        if (!screen) return false;
-        var rt = screen.rectTransform;
-        float w = Mathf.Max(1f, rt.rect.width);
-        float h = Mathf.Max(1f, rt.rect.height);
-        if (!Mathf.Approximately(viewW, w) || !Mathf.Approximately(viewH, h))
-        {
-            viewW = w; viewH = h;
-            return true;
-        }
-        return false;
-    }
-
-    void RebuildAllMetrics()
-    {
-        heights.Clear();
-        for (int i = 0; i < lines.Count; i++)
-            heights.Add(MeasureHeight(lines[i]));
-        RebuildSuffix();
-        cachedProgressH = -1f;
-    }
-
-    void RebuildSuffix()
-    {
-        suf.Clear();
-        float acc = 0f;
-        // идём снизу вверх, накапливая сумму; затем развернём
-        for (int i = lines.Count - 1; i >= 0; i--)
-        {
-            acc += (i < heights.Count ? heights[i] : 0f);
-            suf.Add(acc);
-        }
-        suf.Reverse(); // теперь suf[i] = sum(h[i..N-1]) — как нужно
-    }
-
-    float MeasureHeight(string rich)
-    {
-        if (!screen) return 0f;
-        var v = screen.GetPreferredValues(rich, viewW, 0f);
-        return Mathf.Ceil(v.y + 1f);
-    }
-
-    float TotalContentHeight()
-    {
-        float sum = (suf.Count > 0) ? suf[0] : 0f;
-        if (progActive) sum += ProgressHeight();
+        int sum = 0;
+        for (int i = 0; i < entryLines.Count; i++) sum += entryLines[i];
         return sum;
     }
 
-    float ProgressHeight()
+    void ClampScroll()
     {
-        if (cachedProgressH > 0f) return cachedProgressH;
-        string sample = ProgressLineRaw(1f);
-        var v = screen.GetPreferredValues(sample, viewW, 0f);
-        cachedProgressH = Mathf.Ceil(v.y);
-        return cachedProgressH;
+        int maxSkip = Mathf.Max(0, TotalLines() + (progActive ? 1 : 0) - visibleLines);
+        tailSkipLines = Mathf.Clamp(tailSkipLines, 0, maxSkip);
+        if (tailSkipLines == 0) stickToBottom = true;
     }
 
-    string ProgressLine()
+    // ---------- measuring ----------
+
+    void SetupMeter()
     {
-        float t = Mathf.Clamp01((Time.time - progStart) / progDur);
-        return ProgressLineRaw(t);
+        if (meter) { CopyVisualSettings(meter); lastWidth = Mathf.Max(1f, screen.rectTransform.rect.width); SyncMeterWidth(); return; }
+
+        var go = new GameObject("ConsoleLog_Meter", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        go.transform.SetParent(screen.rectTransform.parent, false);
+        meter = go.GetComponent<TextMeshProUGUI>();
+        CopyVisualSettings(meter);
+        meter.alpha = 0f;                       // невидим
+        meter.gameObject.SetActive(true);       // но активен, чтобы работал ForceMeshUpdate
+
+        lastWidth = Mathf.Max(1f, screen.rectTransform.rect.width);
+        SyncMeterWidth();
     }
 
-    string ProgressLineRaw(float t)
+    void CopyVisualSettings(TMP_Text dst)
+    {
+        var src = screen;
+        var rtd = dst.rectTransform;
+        rtd.anchorMin = rtd.anchorMax = new Vector2(0, 1);
+        rtd.pivot = new Vector2(0, 1);
+        rtd.anchoredPosition = new Vector2(-99999, 99999); // далеко за экран
+        dst.richText = true;
+        dst.enableWordWrapping = wordWrap;
+        dst.overflowMode = TextOverflowModes.Overflow;
+        dst.alignment = TextAlignmentOptions.TopLeft;
+
+        if (dst is TextMeshProUGUI u && src is TextMeshProUGUI v)
+        {
+            u.font = v.font;
+            u.fontSize = v.fontSize;
+            u.lineSpacing = v.lineSpacing;
+            u.enableAutoSizing = false;
+        }
+    }
+
+    void SyncMeterWidth()
+    {
+        if (!meter) return;
+        var rt = meter.rectTransform;
+        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, Mathf.Max(1f, screen.rectTransform.rect.width));
+        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 2000f);
+    }
+
+    int MeasureLines(string rich)
+    {
+        meter.text = rich;
+        meter.ForceMeshUpdate();
+        return Mathf.Max(1, meter.textInfo.lineCount);
+    }
+
+    void RecalculateAllLineCounts()
+    {
+        entryLines.Clear();
+        for (int i = 0; i < entries.Count; i++)
+            entryLines.Add(MeasureLines(entries[i]));
+    }
+
+    // ---------- progress ----------
+
+    float ProgressT() => Mathf.Clamp01((Time.time - progStart) / progDur);
+
+    string ProgressLine(float t)
     {
         int filled = Mathf.Clamp(Mathf.RoundToInt(t * progressWidth), 0, progressWidth);
         string bar = "[" + new string('|', filled) + new string(' ', progressWidth - filled) + $"] {Mathf.RoundToInt(t * 100)}% {progTitle}";
         return $"<color=#{robotHex}>{Escape(bar)}</color>";
     }
+
+    // ---------- utils ----------
 
     static string Escape(string s) => s?.Replace("<", "&lt;").Replace(">", "&gt;") ?? "";
 }

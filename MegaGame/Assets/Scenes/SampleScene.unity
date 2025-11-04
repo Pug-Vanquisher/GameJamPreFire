@@ -269,35 +269,7 @@ MonoBehaviour:
       m_Calls: []
   m_text: '1
 
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1
-
-    1'
+'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -324,8 +296,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 0.2
-  m_fontSizeBase: 0.2
+  m_fontSize: 0.15
+  m_fontSizeBase: 0.15
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -392,8 +364,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 0.32079974, y: -0.12597072}
-  m_SizeDelta: {x: 3.397911, y: 3.5997293}
+  m_AnchoredPosition: {x: 0.32079974, y: -0.3007}
+  m_SizeDelta: {x: 3.3979, y: 3.2067}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &330585543
 GameObject:
@@ -1640,14 +1612,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   screen: {fileID: 219307453}
+  meter: {fileID: 0}
   wordWrap: 1
+  visibleLines: 12
+  scrollStepLines: 5
   robotColor: {r: 0.55, g: 0.95, b: 0.55, a: 1}
   enemyColor: {r: 0.95, g: 0.45, b: 0.45, a: 1}
   worldColor: {r: 1, g: 1, b: 1, a: 1}
   maxHistory: 500
-  scrollStepKeypadPx: 16
-  scrollStepMenuFactor: 0.5
-  overscanPx: 4
   progressWidth: 22
 --- !u!114 &1572284084
 MonoBehaviour:
@@ -1773,7 +1745,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   speed: 400
-  debugWASD: 0
+  debugWASD: 1
   fuelPerUnit: 0.0008333
 --- !u!114 &1585987792
 MonoBehaviour:
