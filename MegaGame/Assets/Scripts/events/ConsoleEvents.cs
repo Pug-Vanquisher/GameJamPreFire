@@ -25,8 +25,8 @@ namespace Events
 
     public readonly struct CommandExecutionStarted
     {
-        public readonly string Title;        // «Осмотр», «Перезарядка», «Атака BRAVO», «Диагностика: Боезапас»...
-        public readonly float Duration;     // секунды
+        public readonly string Title;     
+        public readonly float Duration;   
         public CommandExecutionStarted(string t, float d) { Title = t; Duration = d; }
     }
     public readonly struct CommandExecutionFinished

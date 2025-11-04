@@ -174,7 +174,6 @@ namespace Events
         public EnemyEngaged(string id, string call) { SquadId = id; Callsign = call; }
     }
 
-    // обрати внимание: ReinforcementRequested уже есть; добавь поле CallerCallsign если ещё не было
     public readonly struct ReinforcementRequested
     {
         public readonly string CallerId, CallerCallsign;

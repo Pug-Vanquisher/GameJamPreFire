@@ -1,4 +1,4 @@
-﻿// CommandConsoleUI.cs
+﻿
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -62,12 +62,12 @@ public class CommandConsoleUI : MonoBehaviour
     {
         if (!autoFocus) return;
 
-        // единая обработка цифр верхнего ряда и нампада
+        // Ифы убил
         for (int d = 0; d <= 9; d++)
             if (Input.GetKeyDown(KeyCode.Alpha0 + d) || Input.GetKeyDown(KeyCode.Keypad0 + d))
                 PressDigit(d);
 
-        // режим «Движение»: удержание нампада 8/2/6/4 или стрелок
+        // Ебаный нам пад
         if (CurrentMenu == Menu.Move)
         {
             Vector2 dir = Vector2.zero;
@@ -76,7 +76,7 @@ public class CommandConsoleUI : MonoBehaviour
             if (Input.GetKey(KeyCode.Keypad6)) dir += Vector2.right;  // Восток
             if (Input.GetKey(KeyCode.Keypad4)) dir += Vector2.left;   // Запад
 
-            // альтернативно — стрелки
+            // альтернативно
             if (Input.GetKey(KeyCode.UpArrow)) dir += Vector2.up;
             if (Input.GetKey(KeyCode.DownArrow)) dir += Vector2.down;
             if (Input.GetKey(KeyCode.RightArrow)) dir += Vector2.right;
@@ -150,10 +150,10 @@ public class CommandConsoleUI : MonoBehaviour
         }
         else if (m == Menu.Move)
         {
-            sb.AppendLine("[8] Север — удерживать");
-            sb.AppendLine("[2] Юг — удерживать");
-            sb.AppendLine("[6] Восток — удерживать");
-            sb.AppendLine("[4] Запад — удерживать");
+            sb.AppendLine("[8] Север");
+            sb.AppendLine("[2] Юг");
+            sb.AppendLine("[6] Восток");
+            sb.AppendLine("[4] Запад");
             sb.AppendLine("[0] Назад");
         }
 
@@ -224,7 +224,6 @@ public class CommandConsoleUI : MonoBehaviour
     void HandleMoveMenu(int d)
     {
         if (d == 0) { stack.Pop(); RenderMenu(CurrentMenu); }
-        // само движение реализовано через удержание в Update()
     }
 
     // ====== задержки команд ======

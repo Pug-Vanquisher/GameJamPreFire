@@ -28,7 +28,6 @@ public class PhraseBank : ScriptableObject
     [TextArea] public string[] envSwamp = { "болотистая местность, возможно затопление" };
     [TextArea] public string[] envHills = { "Холмистая местность, обзор частично закрыт" };
 
-    // Подводка к перечислению ближайших объектов
     [TextArea] public string[] nearestLead = { "ближайшие объекты" };
 
     // Объектные названия

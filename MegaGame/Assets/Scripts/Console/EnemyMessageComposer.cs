@@ -8,15 +8,21 @@ public class EnemyMessageComposer : MonoBehaviour
 
     [Header("Шансы отправки сообщений")]
     [Range(0, 1)] public float moveIntentChance = 0.10f;
-    [Range(0, 1)] public float retreatAnnounceChance = 0.70f; 
-    [Range(0, 1)] public float helpAnnounceChance = 0.70f; 
-    [Range(0, 1)] public float engageAnnounceChance = 1.00f;
+    [Range(0, 1)] public float retreatAnnounceChance = 0.70f;
+    [Range(0, 1)] public float helpAnnounceChance = 0.70f;      // запрос помощи
+    [Range(0, 1)] public float heardAnnounceChance = 0.50f;      // слышали выстрелы
+    [Range(0, 1)] public float helpAckAnnounceChance = 0.70f;    // вас принял, иду на помощь
+    [Range(0, 1)] public float resupplyAnnounceChance = 0.35f;   // привезли припасы
+    [Range(0, 1)] public float engageAnnounceChance = 1.00f;     // вступаем в бой
 
     [Header("Кулдауны (сек)")]
     public float minGlobalPerSquadCooldown = 5f;
     public float moveIntentCooldown = 10f;
     public float retreatCooldown = 8f;
     public float helpCooldown = 8f;
+    public float heardCooldown = 6f;
+    public float helpAckCooldown = 6f;
+    public float resupplyCooldown = 12f;
     public float engageCooldown = 2f;
 
     private readonly Dictionary<string, float> lastGlobalBySquad = new();
@@ -44,7 +50,6 @@ public class EnemyMessageComposer : MonoBehaviour
         EventBus.Unsubscribe<EnemyEngaged>(OnEngaged);
     }
 
-
     void OnEnemyPlannedMove(EnemyPlannedMove e)
     {
         if (!phrases) return;
@@ -60,7 +65,7 @@ public class EnemyMessageComposer : MonoBehaviour
             if (city != null)
             {
                 int dirIdx = Dir8Index(city.Pos, e.DestPos);
-                string dir = phrases.dir8Locative != null && phrases.dir8Locative.Length == 8
+                string dir = (phrases.dir8Locative != null && phrases.dir8Locative.Length == 8)
                            ? phrases.dir8Locative[dirIdx] : "севере";
                 msg = phrases.Pick(phrases.enemyMoveToCampRelative)
                              .Replace("{prefix}", prefix)
@@ -71,7 +76,6 @@ public class EnemyMessageComposer : MonoBehaviour
             }
             else
             {
-                // fallback без привязки к городу
                 msg = $"{prefix}, это {e.Callsign}. Выдвигаюсь к лагерю {e.DestName}.";
             }
         }
@@ -83,7 +87,7 @@ public class EnemyMessageComposer : MonoBehaviour
                          .Replace("{city}", e.DestName);
         }
 
-        EventBus.Publish(new ConsoleMessage(ConsoleSender.Enemy, msg));
+        PostEnemy(msg);
     }
 
     void OnEnemyRetreat(EnemyRetreatDeclared e)
@@ -95,65 +99,73 @@ public class EnemyMessageComposer : MonoBehaviour
         string msg = phrases.Pick(phrases.enemyRetreat)
                              .Replace("{prefix}", prefix)
                              .Replace("{call}", e.Callsign);
-        EventBus.Publish(new ConsoleMessage(ConsoleSender.Enemy, msg));
+        PostEnemy(msg);
     }
 
     void OnReinforcementRequested(ReinforcementRequested e)
     {
         if (!phrases) return;
-        if (!Passes("help", e.SquadId, helpCooldown, helpAnnounceChance)) return;
+        if (!Passes("help", e.CallerId, helpCooldown, helpAnnounceChance)) return;
 
         string prefix = phrases.Pick(phrases.enemyPrefixes);
         string msg = phrases.Pick(phrases.enemyRequestHelp)
                              .Replace("{prefix}", prefix)
-                             .Replace("{call}", e.Callsign);
-        EventBus.Publish(new ConsoleMessage(ConsoleSender.Enemy, msg));
+                             .Replace("{call}", e.CallerCallsign);
+        PostEnemy(msg);
     }
 
     void OnHeardShots(EnemyHeardShots e)
     {
-        if (!CanSpeak(e.SquadId)) return; // твой кулдаун
-        var p = bank; // PhraseBank
-        string prefix = p.Pick(p.enemyPrefixes);
-        string dir = p.dir8[e.DirIndex];
-        SayEnemy($"{prefix}, это {e.Callsign}. Слышали выстрелы на {dir} от нас, выдвигаемся на проверку.",
-                 p.enemyHeardShots, ("prefix", prefix), ("call", e.Callsign), ("dir", dir));
+        if (!phrases) return;
+        if (!Passes("heard", e.SquadId, heardCooldown, heardAnnounceChance)) return;
+
+        string prefix = phrases.Pick(phrases.enemyPrefixes);
+        string dir = (phrases.dir8 != null && phrases.dir8.Length == 8) ? phrases.dir8[e.DirIndex] : "севере";
+        string tpl = phrases.Pick(phrases.enemyHeardShots);
+        string msg = tpl.Replace("{prefix}", prefix)
+                        .Replace("{call}", e.Callsign)
+                        .Replace("{dir}", dir);
+        PostEnemy(msg);
     }
 
     void OnHelpAccepted(EnemyHelpAccepted e)
     {
-        if (!CanSpeak(e.ResponderId)) return;
-        var p = bank;
-        string text = p.Pick(p.enemyHelpAck)
-            .Replace("{requester}", e.RequesterCallsign)
-            .Replace("{call}", e.ResponderCallsign);
-        PostEnemy(text);
+        if (!phrases) return;
+        if (!Passes("helpAck", e.ResponderId, helpAckCooldown, helpAckAnnounceChance)) return;
+
+        string tpl = phrases.Pick(phrases.enemyHelpAck);
+        string msg = tpl.Replace("{requester}", e.RequesterCallsign)
+                        .Replace("{call}", e.ResponderCallsign);
+        PostEnemy(msg);
     }
 
     void OnResupplied(EnemyResupplied e)
     {
-        if (!CanSpeak(e.SquadId)) return;
-        var p = bank;
-        string prefix = p.Pick(p.enemyPrefixes);
+        if (!phrases) return;
+        if (!Passes("resupply", e.SquadId, resupplyCooldown, resupplyAnnounceChance)) return;
+
+        string prefix = phrases.Pick(phrases.enemyPrefixes);
 
         if (e.DestKind == NodeKind.City)
         {
-            string what = e.Kind == SupplyKind.Ammo ? p.ammoNames[0] : p.hpNames[0];
-            string tpl = p.Pick(p.enemyResupplyCity);
+            string what = (e.Kind == SupplyKind.Ammo) ? phrases.ammoNames[0] : phrases.hpNames[0];
+            string tpl = phrases.Pick(phrases.enemyResupplyCity);
             PostEnemy(tpl.Replace("{prefix}", prefix)
                          .Replace("{call}", e.Callsign)
                          .Replace("{what}", what)
                          .Replace("{amount}", e.Amount.ToString())
                          .Replace("{city}", e.DestName));
         }
-        else // Camp: ищем ближайший город и направление
+        else
         {
-            var ws = WorldState.Instance; var city = FindNearestCity(ws, e.DestPos);
-            int dirIdx = Dir8Index(city.Pos, e.DestPos); // лагерь относительно города
-            string dir = p.dir8Locative[dirIdx];
-            string what = e.Kind == SupplyKind.Ammo ? p.ammoNames[0] : p.hpNames[0];
+            var ws = WorldState.Instance;
+            var city = FindNearestCity(ws, e.DestPos);
+            if (city == null) return;
 
-            string tpl = p.Pick(p.enemyResupplyCampRelative);
+            int dirIdx = Dir8Index(city.Pos, e.DestPos);
+            string dir = (phrases.dir8Locative != null && phrases.dir8Locative.Length == 8) ? phrases.dir8Locative[dirIdx] : "севере";
+            string what = (e.Kind == SupplyKind.Ammo) ? phrases.ammoNames[0] : phrases.hpNames[0];
+            string tpl = phrases.Pick(phrases.enemyResupplyCampRelative);
             PostEnemy(tpl.Replace("{prefix}", prefix)
                          .Replace("{call}", e.Callsign)
                          .Replace("{what}", what)
@@ -166,16 +178,15 @@ public class EnemyMessageComposer : MonoBehaviour
 
     void OnEngaged(EnemyEngaged e)
     {
-        if (!CanSpeak(e.SquadId)) return;
-        var p = bank;
-        string prefix = p.Pick(p.enemyPrefixes);
-        string msg = p.Pick(p.enemyEngage)
-            .Replace("{prefix}", prefix)
-            .Replace("{call}", e.Callsign);
+        if (!phrases) return;
+        if (!Passes("engage", e.SquadId, engageCooldown, engageAnnounceChance)) return;
+
+        string prefix = phrases.Pick(phrases.enemyPrefixes);
+        string tpl = phrases.Pick(phrases.enemyEngage); 
+        string msg = tpl.Replace("{prefix}", prefix)
+                        .Replace("{call}", e.Callsign);
         PostEnemy(msg);
     }
-
-    // ---------- cooldown utils ----------
 
     bool Passes(string type, string squadId, float perTypeCooldown, float chance)
     {
@@ -188,14 +199,17 @@ public class EnemyMessageComposer : MonoBehaviour
         if (lastByKey.TryGetValue(key, out var tLast))
             if (now - tLast < perTypeCooldown) return false;
 
-        if (UnityEngine.Random.value > Mathf.Clamp01(chance)) return false;
+        if (Random.value > Mathf.Clamp01(chance)) return false;
 
         lastGlobalBySquad[squadId] = now;
         lastByKey[key] = now;
         return true;
     }
 
-    // ---------- helpers ----------
+    void PostEnemy(string msg)
+    {
+        EventBus.Publish(new ConsoleMessage(ConsoleSender.Enemy, msg));
+    }
 
     NodeData FindNearestCity(WorldState ws, Vector2 pos)
     {
@@ -207,22 +221,17 @@ public class EnemyMessageComposer : MonoBehaviour
         foreach (var c in ws.Cities)
         {
             float d = Vector2.Distance(pos, c.Pos);
-            if (d < bestD)
-            {
-                bestD = d;
-                best = c;
-            }
+            if (d < bestD) { bestD = d; best = c; }
         }
-
-        return best; // может вернуть null, если нет столицы и список городов пуст
+        return best; 
     }
 
-    // 0..7: N,NE,E,SE,S,SW,W,NW  (N = вверх, т.е. +Y)
+    // 0..7: N,NE,E,SE,S,SW,W,NW
     int Dir8Index(Vector2 from, Vector2 to)
     {
         Vector2 d = to - from;
         if (d.sqrMagnitude < 1e-6f) return 0;
-        float ang = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; // угол от "север" (+Y)
+        float ang = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; 
         if (ang < 0f) ang += 360f;
         return Mathf.RoundToInt(ang / 45f) % 8;
     }

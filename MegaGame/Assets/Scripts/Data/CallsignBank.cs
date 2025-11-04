@@ -4,7 +4,7 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "World/Callsign Bank")]
 public class CallsignBank : ScriptableObject
 {
-    [TextArea] public string rawList; // вставь сюда txt (по одной строке)
+    [TextArea] public string rawList; 
     List<string> pool;
 
     void OnEnable()

@@ -8,15 +8,12 @@ using Events;
 public class ConsoleLogUI : MonoBehaviour
 {
     [Header("UI")]
-    [SerializeField] private TMP_Text screen;        // видимый TextMeshProUGUI
-    [Tooltip("Необязательный скрытый текст для измерения. Если пусто — создадим автоматом.")]
-    [SerializeField] private TMP_Text meter;         // скрытый измеритель lineCount
+    [SerializeField] private TMP_Text screen;     
+    [SerializeField] private TMP_Text meter;        
     [SerializeField] private bool wordWrap = true;
 
-    [Header("Manual window (lines)")]
-    [Tooltip("Сколько визуальных строк помещаем в окно (с учётом переноса). Прогресс занимает 1 строку.")]
+    [Header("Линии")]
     [SerializeField, Min(1)] private int visibleLines = 12;
-    [Tooltip("Шаг прокрутки по строкам (NumPad 8/2, [9]/[6]).")]
     [SerializeField, Min(1)] private int scrollStepLines = 4;
 
     [Header("Colors")]
@@ -31,10 +28,10 @@ public class ConsoleLogUI : MonoBehaviour
     [SerializeField] private int progressWidth = 22;
 
     // данные
-    private readonly List<string> entries = new(); // rich-тексты
-    private readonly List<int> entryLines = new(); // визуальные строки каждого entry
-    private int tailSkipLines = 0;                 // сколько строк «от низа» скрываем (скролл)
-    private bool stickToBottom = true;             // прилипание к низу
+    private readonly List<string> entries = new(); 
+    private readonly List<int> entryLines = new(); 
+    private int tailSkipLines = 0;                
+    private bool stickToBottom = true;           
 
     // прогресс команды
     private bool progActive;
@@ -52,13 +49,13 @@ public class ConsoleLogUI : MonoBehaviour
         enemyHex = ColorUtility.ToHtmlStringRGB(enemyColor);
         worldHex = ColorUtility.ToHtmlStringRGB(worldColor);
 
-        // базовые настройки видимого текста
+        // базовые настройки
         screen.richText = true;
         screen.enableWordWrapping = wordWrap;
         screen.overflowMode = TextOverflowModes.Overflow;
         screen.alignment = TextAlignmentOptions.TopLeft;
 
-        // подготовим измеритель
+        // измеритель
         SetupMeter();
 
         RecalculateAllLineCounts();
@@ -86,7 +83,6 @@ public class ConsoleLogUI : MonoBehaviour
     {
         if (!screen) return;
 
-        // реагируем на изменение ширины (world canvas масштабы и т.п.)
         float w = Mathf.Max(1f, screen.rectTransform.rect.width);
         if (!Mathf.Approximately(w, lastWidth))
         {
@@ -97,17 +93,15 @@ public class ConsoleLogUI : MonoBehaviour
             RenderWindow();
         }
 
-        // NumPad: 8 — вверх, 2 — вниз (но блокируем при выполнении команды)
+        // NumPad
         if (!progActive)
         {
             if (Input.GetKeyDown(KeyCode.Keypad8)) ScrollUp(scrollStepLines);
             if (Input.GetKeyDown(KeyCode.Keypad2)) ScrollDown(scrollStepLines);
         }
 
-        if (progActive) RenderWindow(); // двигаем индикатор прогресса
+        if (progActive) RenderWindow(); //индикатор прогресса
     }
-
-    // ---------- EVENTS ----------
 
     void OnRunStarted(RunStarted _)
     {
@@ -140,14 +134,12 @@ public class ConsoleLogUI : MonoBehaviour
             int cut = entries.Count - maxHistory;
             entries.RemoveRange(0, cut);
             if (entryLines.Count >= cut) entryLines.RemoveRange(0, cut);
-            // подрезаем и скролл
             ClampScroll();
         }
 
         int linesAdded = MeasureLines(msg);
         entryLines.Add(linesAdded);
 
-        // Если выполняется команда — всегда держимся у низа и не даём скроллить
         if (progActive)
         {
             tailSkipLines = 0;
@@ -155,7 +147,6 @@ public class ConsoleLogUI : MonoBehaviour
         }
         else
         {
-            // Если НЕ у низа — сохраняем визуальную позицию (добавляя новые линии к смещению)
             if (!stickToBottom && tailSkipLines > 0)
                 tailSkipLines += linesAdded;
             else
@@ -168,16 +159,14 @@ public class ConsoleLogUI : MonoBehaviour
 
     void OnScrollRequest(ConsoleScrollRequest rq)
     {
-        // ВАЖНО: [9] — вверх, [6] — вниз. Игнорируем во время прогресса.
         if (progActive) return;
 
-        if (rq.Delta > 0) ScrollUp(scrollStepLines * 2);   // вверх (к старым логам)
-        else ScrollDown(scrollStepLines * 2); // вниз (к новым)
+        if (rq.Delta > 0) ScrollUp(scrollStepLines * 2); 
+        else ScrollDown(scrollStepLines * 2);
     }
 
     void OnCmdStart(CommandExecutionStarted e)
     {
-        // При запуске команды: уходим вниз, блокируем прокрутку до завершения
         progActive = true;
         progStart = Time.time;
         progDur = Mathf.Max(0.01f, e.Duration);
@@ -189,15 +178,12 @@ public class ConsoleLogUI : MonoBehaviour
 
     void OnCmdFinish(CommandExecutionFinished _)
     {
-        // После завершения: снова вниз и показываем результат в самом низу
         progActive = false; progDur = 0f; progTitle = "";
         tailSkipLines = 0;
         stickToBottom = true;
         ClampScroll();
         RenderWindow(forceBottom: true);
     }
-
-    // ---------- CORE: manual window by lines ----------
 
     void RenderWindow(bool forceBottom = false)
     {
@@ -207,11 +193,11 @@ public class ConsoleLogUI : MonoBehaviour
         int windowLines = Mathf.Max(1, visibleLines);
         int payloadLines = Mathf.Max(0, windowLines - (progActive ? 1 : 0));
 
-        // ограничим скролл
+        // скролл
         int maxSkip = Mathf.Max(0, totalVisual - windowLines);
         tailSkipLines = Mathf.Clamp(tailSkipLines, 0, maxSkip);
 
-        // вычисляем старт по «линиям от низа»
+        // старт
         int startIdx = entries.Count - 1;
         int toSkip = tailSkipLines;
         for (int i = entries.Count - 1; i >= 0 && toSkip > 0; i--)
@@ -221,7 +207,6 @@ public class ConsoleLogUI : MonoBehaviour
         }
         if (startIdx < -1) startIdx = -1;
 
-        // набираем окно на payloadLines линий
         var stack = new Stack<string>();
         int taken = 0;
         for (int i = startIdx; i >= 0 && taken < payloadLines; i--)
@@ -239,9 +224,8 @@ public class ConsoleLogUI : MonoBehaviour
         stickToBottom = (tailSkipLines == 0);
     }
 
-    // ---------- scroll helpers (чётное направление) ----------
 
-    void ScrollUp(int lines)   // к старым логам
+    void ScrollUp(int lines)   // Вверх
     {
         if (lines <= 0) return;
         int maxSkip = Mathf.Max(0, TotalLines() + (progActive ? 1 : 0) - visibleLines);
@@ -249,7 +233,7 @@ public class ConsoleLogUI : MonoBehaviour
         stickToBottom = (tailSkipLines == 0);
         RenderWindow();
     }
-    void ScrollDown(int lines) // к новым логам
+    void ScrollDown(int lines) // Вниз
     {
         if (lines <= 0) return;
         tailSkipLines = Mathf.Max(0, tailSkipLines - lines);
@@ -271,8 +255,6 @@ public class ConsoleLogUI : MonoBehaviour
         if (tailSkipLines == 0) stickToBottom = true;
     }
 
-    // ---------- measuring ----------
-
     void SetupMeter()
     {
         if (meter) { CopyVisualSettings(meter); lastWidth = Mathf.Max(1f, screen.rectTransform.rect.width); SyncMeterWidth(); return; }
@@ -281,8 +263,8 @@ public class ConsoleLogUI : MonoBehaviour
         go.transform.SetParent(screen.rectTransform.parent, false);
         meter = go.GetComponent<TextMeshProUGUI>();
         CopyVisualSettings(meter);
-        meter.alpha = 0f;                       // невидим
-        meter.gameObject.SetActive(true);       // но активен, чтобы работал ForceMeshUpdate
+        meter.alpha = 0f;                      
+        meter.gameObject.SetActive(true);       
 
         lastWidth = Mathf.Max(1f, screen.rectTransform.rect.width);
         SyncMeterWidth();
@@ -294,7 +276,7 @@ public class ConsoleLogUI : MonoBehaviour
         var rtd = dst.rectTransform;
         rtd.anchorMin = rtd.anchorMax = new Vector2(0, 1);
         rtd.pivot = new Vector2(0, 1);
-        rtd.anchoredPosition = new Vector2(-99999, 99999); // далеко за экран
+        rtd.anchoredPosition = new Vector2(-99999, 99999); 
         dst.richText = true;
         dst.enableWordWrapping = wordWrap;
         dst.overflowMode = TextOverflowModes.Overflow;
@@ -331,8 +313,6 @@ public class ConsoleLogUI : MonoBehaviour
             entryLines.Add(MeasureLines(entries[i]));
     }
 
-    // ---------- progress ----------
-
     float ProgressT() => Mathf.Clamp01((Time.time - progStart) / progDur);
 
     string ProgressLine(float t)
@@ -341,8 +321,6 @@ public class ConsoleLogUI : MonoBehaviour
         string bar = "[" + new string('|', filled) + new string(' ', progressWidth - filled) + $"] {Mathf.RoundToInt(t * 100)}% {progTitle}";
         return $"<color=#{robotHex}>{Escape(bar)}</color>";
     }
-
-    // ---------- utils ----------
 
     static string Escape(string s) => s?.Replace("<", "&lt;").Replace(">", "&gt;") ?? "";
 }

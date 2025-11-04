@@ -16,7 +16,7 @@ public class PlayerDeathHandler : MonoBehaviour
     void Restart()
     {
         if (GameRunManager.Instance != null)
-            GameRunManager.Instance.RestartSameMap(); // по умолчанию Ч та же карта
+            GameRunManager.Instance.RestartSameMap(); // по умолчанию
         else
             Debug.LogWarning("GameRunManager missing Ч cannot soft-restart.");
     }

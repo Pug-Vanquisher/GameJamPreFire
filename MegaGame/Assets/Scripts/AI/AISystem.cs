@@ -12,8 +12,8 @@ public class AISystem : MonoBehaviour
     [SerializeField] private float pursueTimeCoward = 3f;
     [SerializeField] private float pursueTimeNeutral = 7f;
     [SerializeField] private float pursueTimeAggro = 12f;
-    [SerializeField] private float engageStandOff = 250f;      // дистанция «держим круг»
-    [SerializeField] private float strafeLateralSpeed = 0.45f; // поперечная скорость (доля Speed)
+    [SerializeField] private float engageStandOff = 250f;      // дистанция
+    [SerializeField] private float strafeLateralSpeed = 0.45f; // поперечная скорость
     [SerializeField] private float strafeJitterAmplitude = 8f; // дрожание
 
     [Header("Separation")]
@@ -21,7 +21,7 @@ public class AISystem : MonoBehaviour
     [SerializeField] private float separationPushPerSecond = 250f;
 
     [Header("Shooting")]
-    [SerializeField] private Vector2 shotInterval = new Vector2(1.2f, 2.2f); // интервал для отряда
+    [SerializeField] private Vector2 shotInterval = new Vector2(1.2f, 2.2f); 
     [SerializeField, Range(0f, 1f)] private float enemyHitChance = 0.35f;
     [SerializeField] private Vector2Int baseDamage = new Vector2Int(4, 9);
     [SerializeField] private float damageMultiplier = 1.0f;
@@ -29,22 +29,22 @@ public class AISystem : MonoBehaviour
     [SerializeField] private float initialStaggerMax = 0.7f;
 
     [Header("Limits")]
-    [SerializeField] private int maxMobilePerRegion = 5; // без гарнизонов
-    [SerializeField] private int maxChasers = 5;         // кто одновременно «пасёт» игрока
+    [SerializeField] private int maxMobilePerRegion = 5; 
+    [SerializeField] private int maxChasers = 5;        
 
     [Header("Help / Reinforcement")]
     [SerializeField] private float helpBroadcastRadius = 2500f;
     [SerializeField] private float helpResponseRadius = 2500f;
-    [SerializeField] private float helpPursueTime = 12f;        // сколько «ищем» по вызову
+    [SerializeField] private float helpPursueTime = 12f;        
     [SerializeField, Range(0, 1)] private float cowardRetreatProb = 0.70f;
 
     [Header("React to shots")]
     [SerializeField] private float hearShotRadius = 2200f;
-    [SerializeField, Range(0, 1)] private float hearShotRespondProb = 0.50f; // базовый шанс
-    [SerializeField] private float investigateTime = 8f;                     // сколько «проверяем точку»
+    [SerializeField, Range(0, 1)] private float hearShotRespondProb = 0.50f; 
+    [SerializeField] private float investigateTime = 8f;                     
 
     [Header("Resupply on arrival")]
-    [SerializeField, Range(0, 1)] private float resupplyProb = 0.25f; // шанс пополнить
+    [SerializeField, Range(0, 1)] private float resupplyProb = 0.25f;
     [SerializeField] private Vector2Int resupplyAmmoRange = new Vector2Int(6, 14);
     [SerializeField] private Vector2Int resupplyMedsRange = new Vector2Int(1, 3);
 
@@ -52,7 +52,7 @@ public class AISystem : MonoBehaviour
     [SerializeField] private bool debugBroadcastMovement = true;
     [SerializeField] private float movementBroadcastHz = 3f;
 
-    // таймеры стрельбы (пер-отряд)
+    // таймеры стрельбы
     private readonly Dictionary<string, float> nextFireAt = new();
     private readonly Dictionary<string, float> lastBroadcastAt = new();
 
@@ -71,7 +71,7 @@ public class AISystem : MonoBehaviour
         EventBus.Subscribe<MapGenerated>(OnMapGenerated);
         EventBus.Subscribe<ReinforcementRequested>(OnReinforcementRequested);
         EventBus.Subscribe<SquadDied>(OnSquadDied);
-        EventBus.Subscribe<PlayerFired>(OnPlayerFired);               // << новое
+        EventBus.Subscribe<PlayerFired>(OnPlayerFired);           
         BuildGraph();
     }
     void OnDisable()
@@ -99,7 +99,7 @@ public class AISystem : MonoBehaviour
         var ws = WorldState.Instance; if (!ws) return;
 
         void AddNode(string id) { if (!G.ContainsKey(id)) G[id] = new List<GraphEdge>(); }
-        if (ws.Capital) AddNode(ws.Capital.Id);
+        if (ws.Capital != null) AddNode(ws.Capital.Id);
         foreach (var c in ws.Cities) AddNode(c.Id);
 
         foreach (var r in ws.Roads)
@@ -132,7 +132,6 @@ public class AISystem : MonoBehaviour
         Vector2 player = PlayerState.Pos;
         float dt = 1f / Mathf.Max(1e-4f, tickHz);
 
-        // кого допускаем «в хвост»
         var allowedChasers = new HashSet<string>();
         {
             var list = new List<(SquadData s, float d)>();
@@ -153,7 +152,7 @@ public class AISystem : MonoBehaviour
             Vector2 oldPos = s.Pos;
             bool wasInCombat = s.InCombat;
 
-            // === ГАРНИЗОН ===
+            // ГАРНИЗОН
             if (s.IsGarrison)
             {
                 float d = Vector2.Distance(s.Pos, player);
@@ -163,22 +162,22 @@ public class AISystem : MonoBehaviour
                 if (s.InCombat && shotsThisTick < maxShotsPerTick)
                     if (TryEnemyFire(s)) shotsThisTick++;
 
-                // событие «вступили в бой» — фикс
-                if (!wasInCombat && s.InCombat)
-                    EventBus.Publish(new EnemyEngaged(s.Id, s.Callsign));
+                // событие
+                //if (!wasInCombat && s.InCombat)
+                    //EventBus.Publish(new EnemyEngaged(s.Id, s.Callsign));
 
                 MaybeBroadcastMoved(s, oldPos);
                 continue;
             }
 
-            // === МОБИЛЬНЫЕ ===
+            // МОБИЛЬНЫЕ
             float distToPlayer = Vector2.Distance(s.Pos, player);
 
             if (distToPlayer <= s.DetectionRadius && allowedChasers.Contains(s.Id))
             {
                 s.State = AIState.Engage; s.InCombat = true;
 
-                // трус может отступить
+                // трус
                 if (s.Persona == EnemyPersonality.Cowardly && distToPlayer < engageStandOff * 0.8f && Random.value < cowardRetreatProb)
                 {
                     var far = FarthestNodeFrom(player);
@@ -210,7 +209,6 @@ public class AISystem : MonoBehaviour
             }
             else if (distToPlayer <= s.DetectionRadius && !allowedChasers.Contains(s.Id))
             {
-                // слишком много преследователей
                 s.InCombat = false;
                 if (string.IsNullOrEmpty(s.TargetNodeId)) PickNewTarget(s);
                 s.State = AIState.Return;
@@ -244,7 +242,7 @@ public class AISystem : MonoBehaviour
 
                 if (s.State == AIState.Return || s.State == AIState.Patrol || s.State == AIState.Idle)
                 {
-                    // построение пути при необходимости
+                    // построение пути 
                     if (s.Path == null || s.PathIndex >= s.Path.Count)
                     {
                         if (string.IsNullOrEmpty(s.TargetNodeId)) PickNewTarget(s);
@@ -265,7 +263,6 @@ public class AISystem : MonoBehaviour
                             // цель достигнута
                             if (s.PathIndex >= s.Path.Count)
                             {
-                                // пробуем пополнить узел
                                 TryResupplyOnArrival(s);
 
                                 s.State = AIState.Patrol;
@@ -282,7 +279,6 @@ public class AISystem : MonoBehaviour
 
             ApplySeparation(ws, s, dt);
 
-            // событие «вступили в бой»
             if (!wasInCombat && s.InCombat)
                 EventBus.Publish(new EnemyEngaged(s.Id, s.Callsign));
 
@@ -324,14 +320,13 @@ public class AISystem : MonoBehaviour
         }
     }
 
-    // ---------- поведение «услышали выстрелы» ----------
     void OnPlayerFired(PlayerFired e)
     {
         var ws = WorldState.Instance; if (!ws) return;
 
         foreach (var s in ws.EnemySquads)
         {
-            if (s.IsGarrison) continue; // гарнизон стоит
+            if (s.IsGarrison) continue; 
             if (s.InCombat) continue;
 
             float d = Vector2.Distance(s.Pos, e.Pos);
@@ -340,15 +335,12 @@ public class AISystem : MonoBehaviour
             float p = hearShotRespondProb * PersonaHearModifier(s.Persona);
             if (Random.value > p) continue;
 
-            // сообщим направление (от отряда к месту выстрела)
             int dir = Dir8Index(s.Pos, e.Pos);
             EventBus.Publish(new EnemyHeardShots(s.Id, s.Callsign, dir));
 
-            // идём «проверить» — используем PursueUntil как таймер расследования
             s.State = AIState.Pursue;
             s.PursueUntil = Time.time + investigateTime;
 
-            // двигаемся через дорожную сеть к ближайшей к точке выстрела ноде
             string nearNode = NearestRoadNodeId(e.Pos);
             s.TargetNodeId = nearNode;
             s.Path = null; s.PathIndex = 0;
@@ -366,7 +358,6 @@ public class AISystem : MonoBehaviour
         }
     }
 
-    // ---------- дозаправка / пополнение при прибытии ----------
     void TryResupplyOnArrival(SquadData s)
     {
         if (Random.value > resupplyProb) return;
@@ -378,7 +369,6 @@ public class AISystem : MonoBehaviour
 
         if (node == null) return;
 
-        // что пополняем?
         bool giveAmmo = Random.value < 0.6f;
         int amount = giveAmmo
             ? Random.Range(Mathf.Min(resupplyAmmoRange.x, resupplyAmmoRange.y), Mathf.Max(resupplyAmmoRange.x, resupplyAmmoRange.y) + 1)
@@ -386,7 +376,6 @@ public class AISystem : MonoBehaviour
 
         if (giveAmmo) node.Ammo += amount; else node.Meds += amount;
 
-        // сообщение
         if (node.Type == NodeType.City || node.Type == NodeType.Capital)
         {
             EventBus.Publish(new EnemyResupplied(
@@ -394,7 +383,7 @@ public class AISystem : MonoBehaviour
                 giveAmmo ? SupplyKind.Ammo : SupplyKind.Meds, amount, node.Pos
             ));
         }
-        else // лагерь — с привязкой к ближайшему городу
+        else 
         {
             EventBus.Publish(new EnemyResupplied(
                 s.Id, s.Callsign, NodeKind.Camp, node.Id, node.Name,
@@ -403,7 +392,6 @@ public class AISystem : MonoBehaviour
         }
     }
 
-    // ---------- усиление/ограничения ----------
     void EnforceRegionCap(WorldState ws)
     {
         var byRegion = new Dictionary<int, List<SquadData>>();
@@ -420,7 +408,6 @@ public class AISystem : MonoBehaviour
             var lst = kv.Value;
             if (lst.Count <= maxMobilePerRegion) continue;
 
-            // избыточных уводим в другие регионы
             for (int i = maxMobilePerRegion; i < lst.Count; i++)
             {
                 var s = lst[i];
@@ -439,8 +426,8 @@ public class AISystem : MonoBehaviour
     int CurrentRegionId(Vector2 p)
     {
         var ws = WorldState.Instance; if (!ws) return -1;
-        int bestRegion = ws.Capital ? ws.Capital.RegionId : -1;
-        float bestD = ws.Capital ? Vector2.Distance(p, ws.Capital.Pos) : float.MaxValue;
+        int bestRegion = (ws.Capital != null) ? ws.Capital.RegionId : -1;
+        float bestD = (ws.Capital != null) ? Vector2.Distance(p, ws.Capital.Pos) : float.MaxValue;
         foreach (var c in ws.Cities)
         {
             float d = Vector2.Distance(p, c.Pos);
@@ -472,7 +459,7 @@ public class AISystem : MonoBehaviour
         if (dest != null)
         {
             s.TargetNodeId = dest.Id;
-            PublishMoveIntent(s, dest); // композер сам решит по вероятности
+            PublishMoveIntent(s, dest); 
         }
     }
 
@@ -549,7 +536,7 @@ public class AISystem : MonoBehaviour
                     }
                     dist[e.to] = nd;
                     prev[e.to] = (cur, e.path);
-                    pq.Add(nd + Random.value * 1e-4f, e.to); // шум для уникальности ключа
+                    pq.Add(nd + Random.value * 1e-4f, e.to); // шум для ключа
                 }
             }
         }
@@ -632,7 +619,6 @@ public class AISystem : MonoBehaviour
         return Mathf.RoundToInt(ang / 45f) & 7;
     }
 
-    // помощь: запрос и отклик
     void OnSquadDied(SquadDied e)
     {
         var ws = WorldState.Instance; if (!ws) return;
@@ -663,7 +649,6 @@ public class AISystem : MonoBehaviour
             float resp = PersonaRespondChance(s.Persona);
             if (Random.value <= resp)
             {
-                // сообщение «принял, иду на помощь»
                 EventBus.Publish(new EnemyHelpAccepted(s.Id, s.Callsign, e.CallerCallsign));
 
                 s.State = AIState.Pursue;

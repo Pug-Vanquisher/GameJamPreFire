@@ -22,24 +22,23 @@ public class GameRunManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    // "ћ€гкий" рестарт на той же карте
+    // рестарт на той же карте
     public void RestartSameMap()
     {
         var ws = WorldState.Instance;
         if (!ws || mapGen == null)
         {
-            // запасной вариант Ч если что-то не инициализировано, просто сгенерим всЄ
             if (mapGen != null) mapGen.GenerateNow();
             InitPlayerAndFireRunStarted(true);
             return;
         }
 
         ws.ResetNodesToStart();
-        mapGen.RespawnEnemiesOnly(); // переспавнить только врагов на текущей карте
+        mapGen.RespawnEnemiesOnly(); // переспавнить только врагов
         InitPlayerAndFireRunStarted(true);
     }
 
-    // "∆Єсткий" рестарт с новой картой
+    // рестарт с новой картой
     public void RestartNewMap()
     {
         if (mapGen != null) mapGen.GenerateNow();
@@ -48,18 +47,15 @@ public class GameRunManager : MonoBehaviour
 
     void InitPlayerAndFireRunStarted(bool reuseMap)
     {
-        // инвентарь/оружие Ч сразу в дефолт
         PlayerInventory.Init(startFuel, startHp, startAmmo);
         PlayerWeaponState.Configure(startMag);
 
-        // снап к спавну
         var ws = WorldState.Instance;
         if (ws != null) EventBus.Publish(new PlayerMoved(ws.PlayerSpawn));
 
         EventBus.Publish(new RunStarted(reuseMap));
     }
 
-    // дл€ отладки на клавиатуре
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.F5)) RestartSameMap();

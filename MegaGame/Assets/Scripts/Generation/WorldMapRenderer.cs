@@ -68,7 +68,7 @@ public class WorldMapRenderer : MonoBehaviour
 
 
     [Header("Dev toggles")]
-    [SerializeField] private bool debugRender = false;   // ЕДИНЫЙ флаг: враги + лагеря
+    [SerializeField] private bool debugRender = false; 
     [SerializeField] private bool showBoundaries = true;
     [SerializeField] private bool showHatch = true;
 
@@ -76,7 +76,7 @@ public class WorldMapRenderer : MonoBehaviour
     Color[] row;
 
     readonly List<Image> overlayStatic = new();  // столица/города/лагеря
-    readonly List<Image> overlayDynamic = new(); // враги (мобильные)
+    readonly List<Image> overlayDynamic = new(); // враги 
     int overlayStaticIdx, overlayDynamicIdx;
 
 
