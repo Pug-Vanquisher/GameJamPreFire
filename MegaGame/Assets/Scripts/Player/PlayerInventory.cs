@@ -1,13 +1,12 @@
 using UnityEngine;
+using Events;
 
 public static class PlayerInventory
 {
-    // Капы
     public const int MaxHealth = 100;
     public const int MaxFuel = 100;
     public const int MaxAmmo = 200;
 
-    // Текущее состояние
     public static int Health { get; private set; }
     public static float Fuel { get; private set; }
     public static int Ammo { get; private set; }
@@ -44,7 +43,15 @@ public static class PlayerInventory
         return taken;
     }
 
-    public static void Damage(int dmg) => Health = Mathf.Max(0, Health - Mathf.Abs(dmg));
+    public static void Damage(int dmg)
+    {
+        int old = Health;
+        Health = Mathf.Max(0, Health - Mathf.Abs(dmg));
+
+        EventBus.Publish(new PlayerDamaged(Mathf.Abs(dmg), Health));
+        if (old > 0 && Health == 0)
+            EventBus.Publish(new PlayerDied());
+    }
 
     public static float ConsumeFuelByDistance(float distance)
     {
@@ -57,4 +64,21 @@ public static class PlayerInventory
 
     public static float MaxReachableDistance() =>
         (FuelPerUnit <= 0f) ? float.PositiveInfinity : (Fuel / FuelPerUnit);
+
+    public static void Heal(int hp) => Health = Mathf.Clamp(Health + Mathf.Max(0, hp), 0, MaxHealth);
+    public static float TryConsumeFuel(float amount)
+    {
+        if (amount <= 0f || Fuel <= 0f) return 0f;
+        float spent = Mathf.Min(Fuel, amount);
+        Fuel -= spent;
+        return spent;
+    }
+
+    public static bool TrySpendHealth(int amount)
+    {
+        if (amount <= 0) return false;
+        if (Health < amount) { Health = 0; return false; }
+        Health -= amount;
+        return true;
+    }
 }

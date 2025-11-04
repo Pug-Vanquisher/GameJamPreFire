@@ -18,4 +18,21 @@ namespace Events
             Text = text;
         }
     }
+
+    public readonly struct ConsoleScrollRequest { public readonly float Delta; public ConsoleScrollRequest(float d) { Delta = d; } }
+
+    public readonly struct ConsoleMoveInput { public readonly UnityEngine.Vector2 Dir; public ConsoleMoveInput(UnityEngine.Vector2 d) { Dir = d; } }
+
+    public readonly struct CommandExecutionStarted
+    {
+        public readonly string Title;        // «Осмотр», «Перезарядка», «Атака BRAVO», «Диагностика: Боезапас»...
+        public readonly float Duration;     // секунды
+        public CommandExecutionStarted(string t, float d) { Title = t; Duration = d; }
+    }
+    public readonly struct CommandExecutionFinished
+    {
+        public readonly string Title;
+        public readonly string ResultText;
+        public CommandExecutionFinished(string t, string r) { Title = t; ResultText = r; }
+    }
 }

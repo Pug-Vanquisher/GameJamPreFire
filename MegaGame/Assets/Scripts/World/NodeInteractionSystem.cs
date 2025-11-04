@@ -82,7 +82,6 @@ public class NodeInteractionSystem : MonoBehaviour
     {
         if (camp.IsDestroyed) return;
 
-        // Считаем ЖИВЫЕ гарнизонные отряды, привязанные к этому лагерю
         int alive = ws.EnemySquads.FindAll(s => s.IsGarrison && s.AnchorNodeId == camp.Id).Count;
         if (alive > 0)
         {
@@ -90,17 +89,14 @@ public class NodeInteractionSystem : MonoBehaviour
             return;
         }
 
-        // Забираем ресурсы игроку
         int f = camp.Fuel, m = camp.Meds, a = camp.Ammo;
         PlayerInventory.Add(f, m, a);
 
-        // Помечаем лагерь уничтоженным и убираем из мира
         camp.IsDestroyed = true;
         ws.Camps.RemoveAll(n => n.Id == camp.Id);
 
         Debug.Log($"[Camp] Уничтожен: {camp.Name}. Получено: топливо {f}, мед {m}, патроны {a}");
 
-        // Отправляем событие для композера + сигнал нод-системе (радар/карта и т.п.)
         EventBus.Publish(new CampDestroyed(camp.Id, camp.Name, f, m, a));
         EventBus.Publish(new NodeRemoved(camp.Id));
     }

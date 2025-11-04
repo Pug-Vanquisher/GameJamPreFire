@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using static TreeEditor.TreeEditorHelper;
 
 namespace Events
 {
@@ -93,4 +92,61 @@ namespace Events
         public GarrisonCountChanged(string nodeId, int remaining)
         { NodeId = nodeId; Remaining = remaining; }
     }
+
+    public readonly struct SquadMoved
+    {
+        public readonly string SquadId;
+        public readonly Vector2 Pos;
+        public readonly bool IsGarrison;
+
+        public SquadMoved(string squadId, Vector2 pos, bool isGarrison)
+        { SquadId = squadId; Pos = pos; IsGarrison = isGarrison; }
+    }
+        public readonly struct VisibleTargetsChanged { }
+
+    public enum NodeKind { City, Camp }
+
+    public readonly struct EnemyPlannedMove
+    {
+        public readonly string SquadId;
+        public readonly string Callsign;
+        public readonly NodeKind DestKind;
+        public readonly string DestId;
+        public readonly UnityEngine.Vector2 DestPos;
+        public readonly string DestName;
+        public EnemyPlannedMove(string squadId, string callsign, NodeKind kind, string destId, string destName, UnityEngine.Vector2 destPos)
+        { SquadId = squadId; Callsign = callsign; DestKind = kind; DestId = destId; DestName = destName; DestPos = destPos; }
+    }
+
+    public readonly struct EnemyRetreatDeclared
+    {
+        public readonly string SquadId;
+        public readonly string Callsign;
+        public readonly UnityEngine.Vector2 FromPos;
+        public readonly string DestId;
+        public readonly UnityEngine.Vector2 DestPos;
+        public EnemyRetreatDeclared(string squadId, string callsign, UnityEngine.Vector2 fromPos, string destId, UnityEngine.Vector2 destPos)
+        { SquadId = squadId; Callsign = callsign; FromPos = fromPos; DestId = destId; DestPos = destPos; }
+    }
+
+    public readonly struct ReinforcementRequested
+    {
+        public readonly string SquadId;
+        public readonly string Callsign;
+        public readonly UnityEngine.Vector2 Pos;   // где нужна помощь (обычно позиция боя/игрока)
+        public readonly float Radius;              // кого оповещаем
+        public ReinforcementRequested(string squadId, string callsign, UnityEngine.Vector2 pos, float radius)
+        { SquadId = squadId; Callsign = callsign; Pos = pos; Radius = radius; }
+    }
+
+    // NEW: мобильный отряд вступил в бой
+    public readonly struct EnemyEngaged
+    {
+        public readonly string SquadId;
+        public readonly string Callsign;
+        public readonly UnityEngine.Vector2 Pos;
+        public EnemyEngaged(string squadId, string callsign, UnityEngine.Vector2 pos)
+        { SquadId = squadId; Callsign = callsign; Pos = pos; }
+    }
+
 }

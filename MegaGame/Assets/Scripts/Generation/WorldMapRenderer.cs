@@ -88,6 +88,7 @@ public class WorldMapRenderer : MonoBehaviour
         EventBus.Subscribe<PlayerMoved>(OnPlayerMoved);
         EventBus.Subscribe<SquadSpawned>(OnSquadSpawned);
         EventBus.Subscribe<SquadDied>(OnSquadDied);
+        EventBus.Subscribe<SquadMoved>(OnSquadMoved);
     }
     void OnDisable()
     {
@@ -97,6 +98,7 @@ public class WorldMapRenderer : MonoBehaviour
         EventBus.Unsubscribe<PlayerMoved>(OnPlayerMoved);
         EventBus.Unsubscribe<SquadSpawned>(OnSquadSpawned);
         EventBus.Unsubscribe<SquadDied>(OnSquadDied);
+        EventBus.Unsubscribe<SquadMoved>(OnSquadMoved);
     }
 
     void Start()
@@ -122,6 +124,11 @@ public class WorldMapRenderer : MonoBehaviour
     void OnPlayerMoved(PlayerMoved _) => UpdatePlayerMarker();
     void OnSquadSpawned(SquadSpawned e) => UpdateEnemiesOverlay();
     void OnSquadDied(SquadDied e) => UpdateEnemiesOverlay();
+    void OnSquadMoved(SquadMoved e)
+    {
+        if (e.IsGarrison) return;
+        UpdateEnemiesOverlay();
+    }
 
     void RebuildAll()
     {
@@ -193,7 +200,7 @@ public class WorldMapRenderer : MonoBehaviour
 
         overlayDynamicIdx = 0;
         EnsureOverlayCapacity(overlayDynamic, 64);
-        HideRest(overlayDynamic, overlayDynamicIdx); // почистим начало
+        HideRest(overlayDynamic, overlayDynamicIdx); 
 
         if (!debugRender || !enemyIconPrefab)
         {
@@ -203,7 +210,7 @@ public class WorldMapRenderer : MonoBehaviour
 
         foreach (var s in ws.EnemySquads)
         {
-            if (s.IsGarrison) continue; // на мировой карте гарнизоны не показываем
+            if (s.IsGarrison) continue; 
             var dot = GetFromPool(overlayDynamic, overlayDynamicIdx++, enemyIconPrefab);
             dot.rectTransform.SetParent(overlay, false);
             dot.rectTransform.anchoredPosition = MapRenderUtils.WorldToOverlayAnchored(s.Pos, ws.MapHalfSize, overlay);

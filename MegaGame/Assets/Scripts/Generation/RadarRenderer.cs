@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using Events;
+using TMPro;
 
 public class RadarRenderer : MonoBehaviour
 {
@@ -27,6 +28,11 @@ public class RadarRenderer : MonoBehaviour
 
     readonly List<Image> pool = new();
     int poolIdx = 0;
+    readonly List<Image> poolGeneric = new();
+    int poolGenericIdx = 0;
+    readonly List<Image> poolEnemies = new();
+    int poolEnemyIdx = 0;
+    public float RadarRange => radarRange;
 
     Texture2D tex;
 
@@ -84,24 +90,101 @@ public class RadarRenderer : MonoBehaviour
 
     void RefreshAll()
     {
-        var ws = WorldState.Instance; if (!ws || radarRect == null) return;
+        var ws = WorldState.Instance;
+        if (!ws || radarRect == null) return;
 
         ClearTex(bgColor);
         DrawRoadsAround(PlayerState.Pos, ws);
         tex.Apply();
 
-        poolIdx = 0;
-        EnsurePool(32);
+        poolGenericIdx = 0;
+        poolEnemyIdx = 0;
         HideAll();
 
         Vector2 center = PlayerState.Pos;
 
-        TryDot(ws.PlayerBase?.Pos ?? Vector2.zero, baseDotPrefab, center);
-        TryDot(ws.Capital?.Pos ?? Vector2.zero, baseDotPrefab, center);
+        if (ws.PlayerBase != null) TryDot(ws.PlayerBase.Pos, baseDotPrefab, center);
+        if (ws.Capital != null) TryDot(ws.Capital.Pos, baseDotPrefab, center);
         foreach (var c in ws.Cities) TryDot(c.Pos, cityDotPrefab, center);
         foreach (var k in ws.Camps) TryDot(k.Pos, campDotPrefab, center);
+
+        var visibleIds = new List<string>();
         foreach (var s in ws.EnemySquads)
-            TryDot(s.Pos, enemyDotPrefab, center);
+        {
+            if (Vector2.Distance(s.Pos, center) <= radarRange)
+                visibleIds.Add(s.Id);
+        }
+
+        bool changed = CombatTargetRegistry.UpdateVisibility(visibleIds);
+        if (changed) EventBus.Publish(new VisibleTargetsChanged());
+
+        foreach (var s in ws.EnemySquads)
+        {
+            var dot = TryDotWithReturn(s.Pos, enemyDotPrefab, center);
+            if (!dot) continue;
+
+            if (CombatTargetRegistry.TryGetIndex(s.Id, out int idx))
+                SetMarkerLabel(dot, CombatTargetRegistry.Letter(idx)); 
+            else
+                SetMarkerLabel(dot, ""); 
+        }
+    }
+
+    Image TryDotWithReturn(Vector2 worldPos, Image prefab, Vector2 center)
+    {
+        if (!prefab) return null;
+        if (Vector2.Distance(worldPos, center) > radarRange) return null;
+
+        Vector2 dir = (worldPos - center) / radarRange;
+        Vector2 half = radarRect.rect.size * 0.5f;
+        Vector2 uiPos = new Vector2(dir.x * half.x, dir.y * half.y);
+
+        var dot = GetEnemyDot();               // ÂÀÆÍÎ: èç enemyDotPrefab
+        dot.rectTransform.SetParent(radarRect, false);
+        dot.rectTransform.anchoredPosition = uiPos;
+        dot.gameObject.SetActive(true);
+        return dot;
+    }
+
+    Image GetDotGeneric(Image prefab)
+    {
+        if (poolGenericIdx < poolGeneric.Count)
+        {
+            var it = poolGeneric[poolGenericIdx++];
+            it.sprite = prefab.sprite;
+            it.color = prefab.color;
+            it.rectTransform.sizeDelta = prefab.rectTransform.sizeDelta;
+            return it;
+        }
+        var created = Instantiate(prefab, radarRect);
+        created.gameObject.SetActive(false);
+        poolGeneric.Add(created);
+        poolGenericIdx++;
+        return created;
+    }
+
+    Image GetEnemyDot()
+    {
+        if (poolEnemyIdx < poolEnemies.Count)
+        {
+            var it = poolEnemies[poolEnemyIdx++];
+            return it;
+        }
+        var created = Instantiate(enemyDotPrefab, radarRect);
+        created.gameObject.SetActive(false);
+        poolEnemies.Add(created);
+        poolEnemyIdx++;
+        return created;
+    }
+
+    void SetMarkerLabel(Image dot, string label)
+    {
+        if (!dot) return;
+        var tmp = dot.GetComponentInChildren<TMP_Text>(true);
+        if (tmp) { tmp.gameObject.SetActive(true); tmp.text = label; return; }
+
+        var legacy = dot.GetComponentInChildren<UnityEngine.UI.Text>(true);
+        if (legacy) { legacy.gameObject.SetActive(true); legacy.text = label; }
     }
 
     void ClearTex(Color c)
@@ -174,14 +257,13 @@ public class RadarRenderer : MonoBehaviour
     void TryDot(Vector2 worldPos, Image prefab, Vector2 center)
     {
         if (!prefab) return;
-        float dist = Vector2.Distance(worldPos, center);
-        if (dist > radarRange) return;
+        if (Vector2.Distance(worldPos, center) > radarRange) return;
 
-        Vector2 dir = (worldPos - center) / radarRange; // -1..1
+        Vector2 dir = (worldPos - center) / radarRange;
         Vector2 half = radarRect.rect.size * 0.5f;
         Vector2 uiPos = new Vector2(dir.x * half.x, dir.y * half.y);
 
-        var dot = GetDot(prefab);
+        var dot = GetDotGeneric(prefab);
         dot.rectTransform.SetParent(radarRect, false);
         dot.rectTransform.anchoredPosition = uiPos;
         dot.gameObject.SetActive(true);
@@ -204,6 +286,9 @@ public class RadarRenderer : MonoBehaviour
         return created;
     }
 
-    void EnsurePool(int min) { while (pool.Count < min) pool.Add(new GameObject("dot", typeof(RectTransform), typeof(Image)).GetComponent<Image>()); }
-    void HideAll() { foreach (var it in pool) if (it) it.gameObject.SetActive(false); }
+    void HideAll()
+    {
+        foreach (var it in poolGeneric) if (it) it.gameObject.SetActive(false);
+        foreach (var it in poolEnemies) if (it) it.gameObject.SetActive(false);
+    }
 }
