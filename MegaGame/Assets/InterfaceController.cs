@@ -117,6 +117,7 @@ public class InterfaceController : MonoBehaviour
                 int number;
                 if (int.TryParse(hit.collider.name, out number))
                 {
+                    mouseInterracted = number;
                     Vector3 dir = Vector3.zero;
                     if (number == 2) { dir = Vector2.down; }
                     if (number == 8) { dir = Vector2.up; }
@@ -125,6 +126,14 @@ public class InterfaceController : MonoBehaviour
                     EventBus.Publish(new ConsoleMoveInput(dir));
                 }
             }
+            else
+            {
+                mouseInterracted = -1;
+            }
+        }
+        else
+        {
+            mouseInterracted = -1;
         }
     }
     public void HandleShake()

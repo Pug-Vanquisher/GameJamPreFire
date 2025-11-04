@@ -14,6 +14,7 @@ public class MenuScript : MonoBehaviour
     }
 
     [SerializeField] private GameObject[] window;
+    [SerializeField] private GameObject image;
     [SerializeField] private GameRunManager gamemanager;
     private Menu currentMenu;
 
@@ -26,22 +27,29 @@ public class MenuScript : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            Pause(currentMenu == Menu.None);
+        }
+
+        bool showImage = false;
         for(int i = 0; i < window.Length; i++)
         {
             window[i].SetActive(i == (int)currentMenu && currentMenu != Menu.None);
+            if (i == (int)currentMenu && currentMenu != Menu.None) { showImage = true; }
         }
+        image.SetActive(showImage);
     }
 
     public void Pause(bool isPaused)
     {
         Time.timeScale = (isPaused) ? 0 : 1;
-        if (isPaused) { currentMenu = Menu.Pause; }
-        else { currentMenu = Menu.None; }
+        currentMenu = (isPaused)? Menu.Pause : Menu.None;
     }
 
-    public void OpenMenu(Menu menu)
+    public void OpenMenu(int menu)
     {
-        currentMenu = menu;
+        currentMenu = (Menu)menu;
     }
 
     public void Restart(string variant)
@@ -58,6 +66,7 @@ public class MenuScript : MonoBehaviour
 
     public void Defeat(PlayerDied died)
     {
+        Pause(true);
         currentMenu = Menu.Defeat;
     }
     public void Exit()
