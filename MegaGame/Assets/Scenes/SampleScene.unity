@@ -1570,7 +1570,7 @@ AudioListener:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
-  m_Enabled: 0
+  m_Enabled: 1
 --- !u!20 &330585545
 Camera:
   m_ObjectHideFlags: 0
@@ -5066,19 +5066,19 @@ MonoBehaviour:
   baseActionMult: 0.001
   onHit:
     duration: 0.25
-    strength: {x: 0.05, y: 0.02, z: 0}
-    vibrato: 25
+    strength: {x: 0.0001, y: 0.0001, z: 0}
+    vibrato: 5
     randomness: 90
     fadeOut: 1
     panelsPulse: 0.04
     panelsEase: 6
   onShot:
     duration: 0.12
-    strength: {x: 0.02, y: 0.01, z: 0}
-    vibrato: 20
+    strength: {x: 0.0001, y: 0.0001, z: 0}
+    vibrato: 1
     randomness: 120
     fadeOut: 1
-    panelsPulse: 0.02
+    panelsPulse: 0.15
     panelsEase: 6
   minShakeInterval: 0.05
   globalShakeScale: 1
@@ -5486,7 +5486,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   speed: 200
-  debugWASD: 1
+  debugWASD: 0
   fuelPerUnit: 0.0008333
 --- !u!114 &1585987792
 MonoBehaviour:
