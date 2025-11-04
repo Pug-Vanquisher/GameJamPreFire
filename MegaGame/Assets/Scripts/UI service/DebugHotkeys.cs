@@ -18,5 +18,9 @@ public class DebugHotkeys : MonoBehaviour
             );
             EventBus.Publish(new CityCaptured(id, name, defaultNmb, defaultNmb, defaultNmb));
         }
+        if (Input.GetKeyDown(KeyCode.F2))
+        {
+            EventBus.Publish(new PlayerDamaged(1, 10));
+        }
     }
 }
