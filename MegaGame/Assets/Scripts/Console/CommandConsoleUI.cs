@@ -1,7 +1,7 @@
-// CommandConsoleUI.cs
+п»ї
 using System;
 using System.Collections.Generic;
-using System.Globalization;
+using System.Linq;
 using System.Text;
 using TMPro;
 using UnityEngine;
@@ -10,111 +10,151 @@ using Events;
 public class CommandConsoleUI : MonoBehaviour
 {
     [Header("UI")]
-    [SerializeField] private TMP_Text screen;      // поле текста для списка команд
-    [SerializeField] private bool autoFocus = true; // если true — всегда принимает ввод цифр
+    [SerializeField] private TMP_Text screen;
+    [SerializeField] private bool autoFocus = true;
 
     [Header("Scan settings")]
-    [SerializeField] private float scanRange = 1500f;     // радиус осмотра
-    [SerializeField] private float nearThreshold = 0.5f;  // доля от радиуса, что считаем «близко»
-    [SerializeField] private int maxReportPerType = 3;    // сколько объектов каждого типа перечислять
+    [SerializeField] private float scanRange = 1500f;
+    [SerializeField] private int maxReportPerType = 3;
 
-    [Header("Reload defaults")]
-    [SerializeField] private int defaultMagSize = 10;
+    [Header("Combat balance")]
+    [SerializeField, Range(0f, 1f)] private float hitChance = 0.55f;
+    [SerializeField, Range(0f, 1f)] private float killChance = 0.40f;
+    [SerializeField] private Vector2Int ammoSpentRange = new Vector2Int(1, 3);
 
-    private enum Menu { Root, Combat, Diagnostics, AttackList }
+    [Header("Delays (sec)")]
+    [SerializeField] private float delayScan = 0.8f;
+    [SerializeField] private float delayReload = 0.9f;
+    [SerializeField] private float delayDiagnostics = 0.6f;
+    [SerializeField] private float delayAttack = 0.7f;
+
+    [Header("Targeting")]
+    [SerializeField] private bool useRadarRangeForTargets = true;
+
+    private enum Menu { Root, Combat, Diagnostics, AttackList, Move }
     private readonly Stack<Menu> stack = new();
-    private List<(string label, Vector2 pos)> attackTargets = new();
+
+    private struct TargetInfo { public string id; public string label; public Vector2 pos; }
+    private readonly List<TargetInfo> attackTargets = new();
+
+    private bool busy;
+    private string busyTitle;
 
     void OnEnable()
     {
+        EventBus.Subscribe<VisibleTargetsChanged>(OnVisibleTargetsChanged);
+        EventBus.Subscribe<RunStarted>(OnRunStarted);
         if (screen) RenderMenu(Menu.Root);
-        // инициализируем оружие, если не было
-        PlayerWeaponState.Configure(defaultMagSize);
+    }
+    void OnDisable()
+    {
+        EventBus.Unsubscribe<VisibleTargetsChanged>(OnVisibleTargetsChanged);
+        EventBus.Unsubscribe<RunStarted>(OnRunStarted);
+    }
+
+    void OnRunStarted(RunStarted _)
+    {
+        stack.Clear();
+        RenderMenu(Menu.Root);
     }
 
     void Update()
     {
         if (!autoFocus) return;
-        // цифры верхнего ряда
-        if (Input.GetKeyDown(KeyCode.Alpha0)) PressDigit(0);
-        if (Input.GetKeyDown(KeyCode.Alpha1)) PressDigit(1);
-        if (Input.GetKeyDown(KeyCode.Alpha2)) PressDigit(2);
-        if (Input.GetKeyDown(KeyCode.Alpha3)) PressDigit(3);
-        if (Input.GetKeyDown(KeyCode.Alpha4)) PressDigit(4);
-        if (Input.GetKeyDown(KeyCode.Alpha5)) PressDigit(5);
-        if (Input.GetKeyDown(KeyCode.Alpha6)) PressDigit(6);
-        if (Input.GetKeyDown(KeyCode.Alpha7)) PressDigit(7);
-        if (Input.GetKeyDown(KeyCode.Alpha8)) PressDigit(8);
-        if (Input.GetKeyDown(KeyCode.Alpha9)) PressDigit(9);
-        // numpad
-        if (Input.GetKeyDown(KeyCode.Keypad0)) PressDigit(0);
-        if (Input.GetKeyDown(KeyCode.Keypad1)) PressDigit(1);
-        if (Input.GetKeyDown(KeyCode.Keypad2)) PressDigit(2);
-        if (Input.GetKeyDown(KeyCode.Keypad3)) PressDigit(3);
-        if (Input.GetKeyDown(KeyCode.Keypad4)) PressDigit(4);
-        if (Input.GetKeyDown(KeyCode.Keypad5)) PressDigit(5);
-        if (Input.GetKeyDown(KeyCode.Keypad6)) PressDigit(6);
-        if (Input.GetKeyDown(KeyCode.Keypad7)) PressDigit(7);
-        if (Input.GetKeyDown(KeyCode.Keypad8)) PressDigit(8);
-        if (Input.GetKeyDown(KeyCode.Keypad9)) PressDigit(9);
+
+        // РС„С‹ СѓР±РёР»
+        for (int d = 0; d <= 9; d++)
+            if (Input.GetKeyDown(KeyCode.Alpha0 + d) || Input.GetKeyDown(KeyCode.Keypad0 + d))
+                PressDigit(d);
+
+        // Р•Р±Р°РЅС‹Р№ РЅР°Рј РїР°Рґ
+        if (CurrentMenu == Menu.Move)
+        {
+            Vector2 dir = Vector2.zero;
+            if (Input.GetKey(KeyCode.Keypad8)) dir += Vector2.up;     // РЎРµРІРµСЂ
+            if (Input.GetKey(KeyCode.Keypad2)) dir += Vector2.down;   // Р®Рі
+            if (Input.GetKey(KeyCode.Keypad6)) dir += Vector2.right;  // Р’РѕСЃС‚РѕРє
+            if (Input.GetKey(KeyCode.Keypad4)) dir += Vector2.left;   // Р—Р°РїР°Рґ
+
+            // Р°Р»СЊС‚РµСЂРЅР°С‚РёРІРЅРѕ
+            if (Input.GetKey(KeyCode.UpArrow)) dir += Vector2.up;
+            if (Input.GetKey(KeyCode.DownArrow)) dir += Vector2.down;
+            if (Input.GetKey(KeyCode.RightArrow)) dir += Vector2.right;
+            if (Input.GetKey(KeyCode.LeftArrow)) dir += Vector2.left;
+
+            if (dir.sqrMagnitude > 1f) dir.Normalize();
+            EventBus.Publish(new ConsoleMoveInput(dir));
+        }
     }
 
-    // можно вызывать из «физического нампада» кликом мыши
+    void OnVisibleTargetsChanged(VisibleTargetsChanged _)
+    {
+        if (CurrentMenu == Menu.AttackList || CurrentMenu == Menu.Combat)
+        {
+            BuildAttackTargetsFromRegistry();
+            RenderMenu(CurrentMenu);
+        }
+    }
+
     public void PressDigit(int d)
     {
-        var current = stack.Count == 0 ? Menu.Root : stack.Peek();
-        if (d == 0)
-        {
-            if (current == Menu.Root) return;
-            stack.Pop();
-            RenderMenu(stack.Count == 0 ? Menu.Root : stack.Peek());
-            return;
-        }
+        var m = CurrentMenu;
+        if (d == 0) { if (m != Menu.Root) { stack.Pop(); RenderMenu(CurrentMenu); } return; }
 
-        switch (current)
+        switch (m)
         {
             case Menu.Root: HandleRoot(d); break;
             case Menu.Combat: HandleCombat(d); break;
             case Menu.Diagnostics: HandleDiagnostics(d); break;
             case Menu.AttackList: HandleAttackList(d); break;
+            case Menu.Move: HandleMoveMenu(d); break;
         }
     }
 
-    // ---------- Меню и обработчики ----------
+    Menu CurrentMenu => stack.Count == 0 ? Menu.Root : stack.Peek();
+
     void RenderMenu(Menu m)
     {
-        if (screen == null) return;
+        if (!screen) return;
         var sb = new StringBuilder();
 
         if (m == Menu.Root)
         {
-            sb.AppendLine("[1] Осмотр");
-            sb.AppendLine("[2] Бой >");
-            sb.AppendLine("[3] Диагностика >");
+            sb.AppendLine("[1] РћСЃРјРѕС‚СЂ");
+            sb.AppendLine("[2] Р‘РѕР№ >");
+            sb.AppendLine("[3] Р”РёР°РіРЅРѕСЃС‚РёРєР° >");
+            sb.AppendLine("[4] Р”РІРёР¶РµРЅРёРµ >");
+            sb.AppendLine();
+            sb.AppendLine("[9] РџСЂРѕРєСЂСѓС‚РєР° Р»РѕРіРѕРІ в†‘");
+            sb.AppendLine("[6] РџСЂРѕРєСЂСѓС‚РєР° Р»РѕРіРѕРІ в†“");
         }
         else if (m == Menu.Combat)
         {
-            sb.AppendLine("[1] Атаковать >");
-            sb.AppendLine("[2] Перезарядка");
-            sb.AppendLine("[0] Назад");
+            sb.AppendLine("[1] РђС‚Р°РєРѕРІР°С‚СЊ >");
+            sb.AppendLine("[2] РџРµСЂРµР·Р°СЂСЏРґРєР°");
+            sb.AppendLine("[0] РќР°Р·Р°Рґ");
         }
         else if (m == Menu.Diagnostics)
         {
-            sb.AppendLine("[1] Состояние корпуса");
-            sb.AppendLine("[2] Боезапас");
-            sb.AppendLine("[3] Бензобак");
-            sb.AppendLine("[0] Назад");
+            sb.AppendLine("[1] РЎРѕСЃС‚РѕСЏРЅРёРµ РєРѕСЂРїСѓСЃР°");
+            sb.AppendLine("[2] Р‘РѕРµР·Р°РїР°СЃ");
+            sb.AppendLine("[3] Р‘РµРЅР·РѕР±Р°Рє");
+            sb.AppendLine("[0] РќР°Р·Р°Рґ");
         }
         else if (m == Menu.AttackList)
         {
-            if (attackTargets.Count == 0)
-                sb.AppendLine("Целей нет в радиусе.");
-            else
-            {
-                for (int i = 0; i < attackTargets.Count && i < 9; i++)
-                    sb.AppendLine($"[{i + 1}] {attackTargets[i].label}");
-            }
-            sb.AppendLine("[0] Назад");
+            if (attackTargets.Count == 0) sb.AppendLine("Р¦РµР»РµР№ РЅРµС‚ РІ СЂР°РґРёСѓСЃРµ.");
+            else for (int i = 0; i < attackTargets.Count && i < 9; i++)
+                    sb.AppendLine($"[{i + 1}] РђС‚Р°РєРѕРІР°С‚СЊ С†РµР»СЊ {attackTargets[i].label}");
+            sb.AppendLine("[0] РќР°Р·Р°Рґ");
+        }
+        else if (m == Menu.Move)
+        {
+            sb.AppendLine("[8] РЎРµРІРµСЂ");
+            sb.AppendLine("[2] Р®Рі");
+            sb.AppendLine("[6] Р’РѕСЃС‚РѕРє");
+            sb.AppendLine("[4] Р—Р°РїР°Рґ");
+            sb.AppendLine("[0] РќР°Р·Р°Рґ");
         }
 
         screen.text = sb.ToString();
@@ -122,209 +162,192 @@ public class CommandConsoleUI : MonoBehaviour
 
     void HandleRoot(int d)
     {
-        if (d == 1) { DoScan(); return; }
+        if (d == 1) { StartCommand("РћСЃРјРѕС‚СЂ", delayScan, DoScanNow); return; }
         if (d == 2) { stack.Push(Menu.Combat); RenderMenu(Menu.Combat); return; }
         if (d == 3) { stack.Push(Menu.Diagnostics); RenderMenu(Menu.Diagnostics); return; }
+        if (d == 4) { stack.Push(Menu.Move); RenderMenu(Menu.Move); return; }
+
+        if (d == 9) { EventBus.Publish(new ConsoleScrollRequest(+1f)); return; }
+        if (d == 6) { EventBus.Publish(new ConsoleScrollRequest(-1f)); return; }
     }
 
     void HandleCombat(int d)
     {
         if (d == 1)
         {
-            BuildAttackTargets();
+            BuildAttackTargetsFromRegistry();
             stack.Push(Menu.AttackList);
             RenderMenu(Menu.AttackList);
             return;
         }
         if (d == 2)
         {
-            bool ok = PlayerWeaponState.Reload();
-            if (ok)
+            StartCommand("РџРµСЂРµР·Р°СЂСЏРґРєР°", delayReload, () =>
             {
-                EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
-                    $"Перезарядка: {PlayerWeaponState.InMag}/{PlayerWeaponState.MagSize}. Остаток боезапаса: {PlayerInventory.Ammo}"));
-            }
-            else
-            {
-                EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
-                    "Перезарядка невозможна: магазин полон или нет боеприпасов."));
-            }
+                bool ok = PlayerWeaponState.Reload();
+                string msg = ok
+                    ? $"РџРµСЂРµР·Р°СЂСЏРґРєР°: {PlayerWeaponState.InMag}/{PlayerWeaponState.MagSize}. РћСЃС‚Р°С‚РѕРє Р±РѕРµР·Р°РїР°СЃР°: {PlayerInventory.Ammo}"
+                    : "РџРµСЂРµР·Р°СЂСЏРґРєР° РЅРµРІРѕР·РјРѕР¶РЅР°: РјР°РіР°Р·РёРЅ РїРѕР»РѕРЅ РёР»Рё РЅРµС‚ Р±РѕРµРїСЂРёРїР°СЃРѕРІ.";
+                EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, msg));
+            });
             return;
         }
     }
 
     void HandleDiagnostics(int d)
     {
-        if (d == 1)
+        if (d is >= 1 and <= 3)
         {
-            EventBus.Publish(new PlayerDiagnosticsReport(
-                DiagKind.Health,
-                PlayerInventory.Health, PlayerInventory.MaxHealth,
-                PlayerWeaponState.InMag, PlayerWeaponState.MagSize,
-                PlayerInventory.Ammo, PlayerInventory.MaxAmmo,
-                PlayerInventory.Fuel, PlayerInventory.MaxFuel
-            ));
-            return;
-        }
-        if (d == 2)
-        {
-            EventBus.Publish(new PlayerDiagnosticsReport(
-                DiagKind.Ammo,
-                PlayerInventory.Health, PlayerInventory.MaxHealth,
-                PlayerWeaponState.InMag, PlayerWeaponState.MagSize,
-                PlayerInventory.Ammo, PlayerInventory.MaxAmmo,
-                PlayerInventory.Fuel, PlayerInventory.MaxFuel
-            ));
-            return;
-        }
-        if (d == 3)
-        {
-            EventBus.Publish(new PlayerDiagnosticsReport(
-                DiagKind.Fuel,
-                PlayerInventory.Health, PlayerInventory.MaxHealth,
-                PlayerWeaponState.InMag, PlayerWeaponState.MagSize,
-                PlayerInventory.Ammo, PlayerInventory.MaxAmmo,
-                PlayerInventory.Fuel, PlayerInventory.MaxFuel
-            ));
-            return;
+            string title = d switch { 1 => "Р”РёР°РіРЅРѕСЃС‚РёРєР°: РљРѕСЂРїСѓСЃ", 2 => "Р”РёР°РіРЅРѕСЃС‚РёРєР°: Р‘РѕРµР·Р°РїР°СЃ", _ => "Р”РёР°РіРЅРѕСЃС‚РёРєР°: РўРѕРїР»РёРІРѕ" };
+            StartCommand(title, delayDiagnostics, () =>
+            {
+                var kind = d == 1 ? DiagKind.Health : d == 2 ? DiagKind.Ammo : DiagKind.Fuel;
+                EventBus.Publish(new PlayerDiagnosticsReport(
+                    kind,
+                    PlayerInventory.Health, PlayerInventory.MaxHealth,
+                    PlayerWeaponState.InMag, PlayerWeaponState.MagSize,
+                    PlayerInventory.Ammo, PlayerInventory.MaxAmmo,
+                    PlayerInventory.Fuel, PlayerInventory.MaxFuel
+                ));
+            });
         }
     }
 
     void HandleAttackList(int d)
     {
         int idx = d - 1;
-        if (idx < 0 || idx >= attackTargets.Count) return;
-
+        if ((uint)idx >= (uint)attackTargets.Count) return;
         var t = attackTargets[idx];
-        // здесь позже подключим боевую систему
-        EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
-            $"Цель «{t.label}»: наведение… (боевой модуль в разработке)"));
+        StartCommand($"РђС‚Р°РєР° {t.label}", delayAttack, () => PerformFireAtTarget(t));
     }
 
-    // ---------- Логика команд ----------
-    void DoScan()
+    void HandleMoveMenu(int d)
+    {
+        if (d == 0) { stack.Pop(); RenderMenu(CurrentMenu); }
+    }
+
+    // ====== Р·Р°РґРµСЂР¶РєРё РєРѕРјР°РЅРґ ======
+    void StartCommand(string title, float delay, Action onDone)
+    {
+        if (busy)
+        {
+            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, $"Р’С‹РїРѕР»РЅСЏРµС‚СЃСЏ: {busyTitle}..."));
+            return;
+        }
+        busy = true; busyTitle = title;
+
+        EventBus.Publish(new CommandExecutionStarted(title, delay));
+        StartCoroutine(Delayed());
+
+        System.Collections.IEnumerator Delayed()
+        {
+            float t = Time.time + Mathf.Max(0f, delay);
+            while (Time.time < t) yield return null;
+
+            try { onDone?.Invoke(); }
+            finally
+            {
+                EventBus.Publish(new CommandExecutionFinished(title, title));
+                busy = false; busyTitle = null;
+            }
+        }
+    }
+
+    // ====== Р±РѕР№ ======
+    void PerformFireAtTarget(TargetInfo t)
+    {
+        int lo = Mathf.Min(ammoSpentRange.x, ammoSpentRange.y);
+        int hi = Mathf.Max(ammoSpentRange.x, ammoSpentRange.y);
+        int spentReq = Mathf.Clamp(UnityEngine.Random.Range(lo, hi + 1), 1, 999);
+
+        if (!PlayerWeaponState.CanSpend(spentReq))
+        {
+            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
+                $"РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїР°С‚СЂРѕРЅРѕРІ РІ РјР°РіР°Р·РёРЅРµ ({PlayerWeaponState.InMag}). РўСЂРµР±СѓРµС‚СЃСЏ {spentReq}. РџРµСЂРµР·Р°СЂСЏРґРєР° [2]."));
+            return;
+        }
+
+        PlayerWeaponState.TrySpend(spentReq);
+        EventBus.Publish(new PlayerFired(PlayerState.Pos));
+        EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
+            $"РћРіРѕРЅСЊ РїРѕ {t.label}: СЂР°СЃС…РѕРґ {spentReq}. {PlayerWeaponState.InMag}/{PlayerWeaponState.MagSize} РІ РјР°РіР°Р·РёРЅРµ."));
+
+        bool hit = UnityEngine.Random.value < hitChance;
+        if (!hit) { EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, $"РџСЂРѕРјР°С… РїРѕ С†РµР»Рё {t.label}.")); return; }
+
+        EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, $"РџРѕРїР°РґР°РЅРёРµ РїРѕ {t.label}."));
+
+        bool kill = UnityEngine.Random.value < killChance;
+        if (kill)
+        {
+            bool ok = AISystem.KillSquadById(t.id, t.pos);
+            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, ok
+                ? $"Р¦РµР»СЊ {t.label} СѓРЅРёС‡С‚РѕР¶РµРЅР°."
+                : $"Р¦РµР»СЊ {t.label} РїРѕС‚РµСЂСЏРЅР° (РЅРµ РЅР°Р№РґРµРЅР°)."));
+        }
+        else
+        {
+            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, $"Р¦РµР»СЊ {t.label} РїРѕР»СѓС‡РёР»Р° РїРѕРІСЂРµР¶РґРµРЅРёСЏ, РѕСЃС‚Р°С‘С‚СЃСЏ Р±РѕРµСЃРїРѕСЃРѕР±РЅРѕР№."));
+        }
+    }
+
+    // ====== С†РµР»Рё РґР»СЏ Р°С‚Р°РєРё ======
+    void BuildAttackTargetsFromRegistry()
+    {
+        var ws = WorldState.Instance; attackTargets.Clear();
+        if (!ws) return;
+
+        var vis = CombatTargetRegistry.GetVisibleOrdered(); // (id, idx)
+        foreach (var (id, idx) in vis)
+        {
+            var s = ws.EnemySquads.FirstOrDefault(q => q.Id == id);
+            if (s == null) continue;
+            attackTargets.Add(new TargetInfo { id = id, label = CombatTargetRegistry.Nato(idx), pos = s.Pos });
+            if (attackTargets.Count >= 9) break;
+        }
+        if (attackTargets.Count == 0)
+            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, "Р¦РµР»РµР№ РґР»СЏ Р°С‚Р°РєРё РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅРѕ."));
+    }
+
+    // ====== РѕСЃРјРѕС‚СЂ ======
+    void DoScanNow()
     {
         var ws = WorldState.Instance; if (!ws) return;
         Vector2 me = PlayerState.Pos;
 
-        // Биом в точке игрока
-        var biome = ws.SampleBiome(me);
-
-        // ---- ДОРОГИ: кандидат = ближайшая точка на каждой дороге ----
-        var roadBestById = new Dictionary<int, (int dir, float dist)>();
-        foreach (var road in ws.Roads)
+        var roadBest = new Dictionary<int, (int dir, float dist)>();
+        foreach (var r in ws.Roads)
         {
-            if (road.Path == null || road.Path.Count < 2) continue;
+            if (r.Path == null || r.Path.Count < 2) continue;
             float best = float.MaxValue; Vector2 bestP = me;
-            for (int i = 0; i < road.Path.Count - 1; i++)
+            for (int i = 0; i < r.Path.Count - 1; i++)
             {
-                Vector2 p = ClosestPointOnSegment(me, road.Path[i], road.Path[i + 1]);
+                Vector2 p = ClosestPointOnSegment(me, r.Path[i], r.Path[i + 1]);
                 float d = Vector2.Distance(me, p);
                 if (d < best) { best = d; bestP = p; }
             }
             if (best <= scanRange)
             {
                 int dir = Dir8Index(me, bestP);
-                var tuple = (dir, best);
-                if (!roadBestById.TryGetValue(road.Id, out var cur) || best < cur.dist)
-                    roadBestById[road.Id] = tuple;
+                if (!roadBest.TryGetValue(r.Id, out var cur) || best < cur.dist)
+                    roadBest[r.Id] = (dir, best);
             }
         }
-        var roadCandidates = new List<(int dir, float dist)>(roadBestById.Values);
-        var roadDirs = PickDirsDistinct(roadCandidates, maxReportPerType);
+        var roadDirs = PickDirsDistinct(roadBest.Values.ToList(), maxReportPerType);
 
-        // ---- ГОРОДА ----
-        var cityCandidates = new List<(int dir, float dist)>();
-        foreach (var n in ws.Cities)
-        {
-            float d = Vector2.Distance(me, n.Pos);
-            if (d > scanRange) continue;
-            cityCandidates.Add((Dir8Index(me, n.Pos), d));
-        }
-        var cityDirs = PickDirsDistinct(cityCandidates, maxReportPerType);
+        var cityDirs = PickDirsDistinct(ws.Cities.Select(c => (Dir8Index(me, c.Pos), Vector2.Distance(me, c.Pos)))
+            .Where(t => t.Item2 <= scanRange).ToList(), maxReportPerType);
 
-        // ---- ЛАГЕРЯ ----
-        var campCandidates = new List<(int dir, float dist)>();
-        foreach (var n in ws.Camps)
-        {
-            float d = Vector2.Distance(me, n.Pos);
-            if (d > scanRange) continue;
-            campCandidates.Add((Dir8Index(me, n.Pos), d));
-        }
-        var campDirs = PickDirsDistinct(campCandidates, maxReportPerType);
+        var campDirs = PickDirsDistinct(ws.Camps.Select(c => (Dir8Index(me, c.Pos), Vector2.Distance(me, c.Pos)))
+            .Where(t => t.Item2 <= scanRange).ToList(), maxReportPerType);
 
-        // ---- ПРОТИВНИКИ ----
-        var enemyCandidates = new List<(int dir, float dist)>();
-        foreach (var e in ws.EnemySquads)
-        {
-            float d = Vector2.Distance(me, e.Pos);
-            if (d > scanRange) continue;
-            enemyCandidates.Add((Dir8Index(me, e.Pos), d));
-        }
-        var enemyDirs = PickDirsDistinct(enemyCandidates, maxReportPerType);
+        var enemyDirs = PickDirsDistinct(ws.EnemySquads.Select(e => (Dir8Index(me, e.Pos), Vector2.Distance(me, e.Pos)))
+            .Where(t => t.Item2 <= scanRange).ToList(), maxReportPerType);
 
-        // Отправляем ДАННЫЕ в композер
-        EventBus.Publish(new PlayerScanReport(
-            biome,
-            roadDirs.ToArray(),
-            cityDirs.ToArray(),
-            campDirs.ToArray(),
-            enemyDirs.ToArray()
-        ));
+        EventBus.Publish(new PlayerScanReport(ws.SampleBiome(me),
+            roadDirs.ToArray(), cityDirs.ToArray(), campDirs.ToArray(), enemyDirs.ToArray()));
     }
 
-    (Vector2 pos, float dist) FindNearestRoadPoint(WorldState ws, Vector2 me)
-    {
-        float best = float.MaxValue; Vector2 bestP = me;
-        foreach (var r in ws.Roads)
-        {
-            var path = r.Path; if (path == null || path.Count < 2) continue;
-            for (int i = 0; i < path.Count - 1; i++)
-            {
-                Vector2 p = ClosestPointOnSegment(me, path[i], path[i + 1]);
-                float d = Vector2.Distance(me, p);
-                if (d < best) { best = d; bestP = p; }
-            }
-        }
-        return (bestP, best);
-    }
-
-    List<(string label, Vector2 pos)> NearestNodes(List<NodeData> nodes, Vector2 me, float range, int max)
-    {
-        var res = new List<(string label, Vector2 pos)>();
-        foreach (var n in nodes)
-        {
-            float d = Vector2.Distance(me, n.Pos);
-            if (d <= range) res.Add((label: n.Name, pos: n.Pos));
-        }
-        res.Sort((a, b) => Vector2.Distance(me, a.pos).CompareTo(Vector2.Distance(me, b.pos)));
-        if (res.Count > max) res.RemoveRange(max, res.Count - max);
-        return res;
-    }
-
-    List<(string label, Vector2 pos)> NearestSquads(WorldState ws, Vector2 me, float range, int max)
-    {
-        var res = new List<(string label, Vector2 pos)>();
-        foreach (var s in ws.EnemySquads)
-        {
-            float d = Vector2.Distance(me, s.Pos);
-            if (d <= range) res.Add((label: $"группа {s.Id}", pos: s.Pos));
-        }
-        res.Sort((a, b) => Vector2.Distance(me, a.pos).CompareTo(Vector2.Distance(me, b.pos)));
-        if (res.Count > max) res.RemoveRange(max, res.Count - max);
-        return res;
-    }
-
-    void BuildAttackTargets()
-    {
-        var ws = WorldState.Instance; if (!ws) { attackTargets.Clear(); return; }
-        Vector2 me = PlayerState.Pos;
-        attackTargets = NearestSquads(ws, me, scanRange, 9);
-        if (attackTargets.Count == 0)
-            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot, "Целей для атаки не обнаружено."));
-    }
-
-    // ---------- Геометрия / направление ----------
     static Vector2 ClosestPointOnSegment(Vector2 p, Vector2 a, Vector2 b)
     {
         Vector2 ab = b - a;
@@ -333,20 +356,16 @@ public class CommandConsoleUI : MonoBehaviour
         return a + ab * t;
     }
 
-    // выбирает до max направлений, блокируя соседние сектора
-    List<int> PickDirsDistinct(List<(int dir, float dist)> candidates, int max)
+    List<int> PickDirsDistinct(List<(int dir, float dist)> cand, int max)
     {
-        candidates.Sort((a, b) => a.dist.CompareTo(b.dist));
+        cand.Sort((a, b) => a.dist.CompareTo(b.dist));
         var result = new List<int>(max);
         bool[] blocked = new bool[8];
-
-        foreach (var (dir, _) in candidates)
+        foreach (var (dir, _) in cand)
         {
             if (blocked[dir]) continue;
             result.Add(dir);
-            blocked[dir] = true;
-            blocked[(dir + 1) & 7] = true;   // сосед справа
-            blocked[(dir + 7) & 7] = true;   // сосед слева
+            blocked[dir] = true; blocked[(dir + 1) & 7] = true; blocked[(dir + 7) & 7] = true;
             if (result.Count >= max) break;
         }
         return result;
@@ -354,13 +373,8 @@ public class CommandConsoleUI : MonoBehaviour
 
     int Dir8Index(Vector2 from, Vector2 to)
     {
-        Vector2 d = to - from;
-        if (d.sqrMagnitude < 1e-6f) return 0;
-
-        // 0° = север, 90° = восток, 180° = юг, 270° = запад
-        float ang = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg;
-        if (ang < 0f) ang += 360f;
-
-        return Mathf.RoundToInt(ang / 45f) % 8;
+        Vector2 d = to - from; if (d.sqrMagnitude < 1e-6f) return 0;
+        float ang = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; if (ang < 0f) ang += 360f;
+        return Mathf.RoundToInt(ang / 45f) & 7;
     }
 }

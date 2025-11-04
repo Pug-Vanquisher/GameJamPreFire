@@ -8,7 +8,21 @@ public class WorldState : MonoBehaviour
     public float MapHalfSize { get; private set; }
 
     public class RegionSeed { public int Id; public Vector2 Pos; }
-    public List<RegionSeed> Regions = new(); 
+    public List<RegionSeed> Regions = new();
+
+    public void ResetNodesToStart()
+    {
+        if (Capital != null) Capital.ResetToStart();
+        if (PlayerBase != null) PlayerBase.ResetToStart();
+        foreach (var c in Cities) c.ResetToStart();
+        foreach (var k in Camps) k.ResetToStart();
+    }
+
+    public void ClearEnemies()
+    {
+        EnemySquads.Clear();
+    }
+
     public int GetRegionId(Vector2 p, out float d1, out float d2)
     {
         int best = -1, second = -1; d1 = float.MaxValue; d2 = float.MaxValue;
@@ -35,6 +49,7 @@ public class WorldState : MonoBehaviour
                                      (p.y + MapHalfSize + off2.y) * f2);
         return Mathf.Clamp01(Mathf.Lerp(n1, n2, blend));
     }
+
 
     public Biome SampleBiome(Vector2 p)
     {
@@ -132,6 +147,19 @@ public class NodeData
     public int Fuel;
     public int Meds;
     public int Ammo;
+
+    public bool StartCaptured;
+    public bool StartDestroyed;
+    public int StartGarrison;
+    public int StartFuel, StartMeds, StartAmmo;
+
+    public void ResetToStart()
+    {
+        IsCaptured = StartCaptured;
+        IsDestroyed = StartDestroyed;
+        Garrison = StartGarrison;
+        Fuel = StartFuel; Meds = StartMeds; Ammo = StartAmmo;
+    }
 
     public NodeData(string id, string name, NodeType type, Faction faction,
                     Vector2 pos, int regionId, string terrain, bool isCapital = false)

@@ -1,26 +1,34 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using Events;
 
 public class WorldMapRenderer : MonoBehaviour
 {
     [Header("UI")]
-    [SerializeField] private RawImage mapImage;      
-    [SerializeField] private RectTransform overlay; 
+    [SerializeField] private RawImage mapImage;
+    [SerializeField] private RectTransform overlay;
     [SerializeField] private Image playerMarker;
-    [SerializeField] private Image cityIconPrefab;
-    [SerializeField] private Image capitalIconPrefab;
+
+    [Header("Prefabs")]
+    [SerializeField] private Image cityIconPrefab;      // у префаба сверху — TMP_Text (название)
+    [SerializeField] private Image capitalIconPrefab;   // у префаба сверху — TMP_Text (название)
     [SerializeField] private Image enemyIconPrefab;
     [SerializeField] private Image campIconPrefab;
+
+    [Header("Icon variants (random)")]
+    [SerializeField] private List<Sprite> citySpriteVariants = new();     // спрайты на выбор для города
+    [SerializeField] private List<Sprite> capitalSpriteVariants = new();  // спрайты на выбор для столицы
+    [SerializeField] private bool showCityNames = true;
+    [SerializeField] private bool showCapitalName = true;
 
     [Header("Texture")]
     [SerializeField] private int texWidth = 512;
     [SerializeField] private int texHeight = 512;
-    [SerializeField] private FilterMode filter = FilterMode.Point; 
+    [SerializeField] private FilterMode filter = FilterMode.Point;
 
     [Header("Colors / Layers")]
-    [SerializeField] private Color biomeFallback = new Color(0.10f, 0.12f, 0.10f, 1f); 
     [SerializeField] private Color regionHatchColor = new Color(0f, 0f, 0f, 0.16f);
     [SerializeField] private int regionHatchSpacing = 8;
     [SerializeField] private int regionHatchThickness = 1;
@@ -43,22 +51,22 @@ public class WorldMapRenderer : MonoBehaviour
 
     [Header("Plains (штрихи-борозды)")]
     [SerializeField] private Color plainsStrokeColor = new Color(0.10f, 0.14f, 0.10f, 0.35f);
-    [SerializeField] private int plainsCell = 14;     // шаг сетки штрихов
-    [SerializeField] private int plainsLen = 7;      // длина штриха 
-    [SerializeField] private int plainsThick = 1;      // толщина диска
-    [SerializeField, Range(0, 1)] private float plainsDensity = 0.28f; // вероятность штриха в ячейке
+    [SerializeField] private int plainsCell = 14;
+    [SerializeField] private int plainsLen = 7;
+    [SerializeField] private int plainsThick = 1;
+    [SerializeField, Range(0, 1)] private float plainsDensity = 0.28f;
 
     [Header("Swamp (болотная штриховка)")]
     [SerializeField] private Color swampHatchColor = new Color(0.18f, 0.45f, 0.70f, 0.40f);
-    [SerializeField] private int swampSpacing = 7;    // вертикальный шаг
-    [SerializeField] private int swampDash = 8;    // длина штриха
-    [SerializeField] private int swampGap = 5;    // разрыв между штрихами
+    [SerializeField] private int swampSpacing = 7;
+    [SerializeField] private int swampDash = 8;
+    [SerializeField] private int swampGap = 5;
     [SerializeField] private int swampThick = 1;
 
     [Header("Forest (кромка кронами)")]
     [SerializeField] private Color forestDotColor = new Color(0.06f, 0.18f, 0.08f, 0.55f);
     [SerializeField] private int forestDotR = 1;
-    [SerializeField] private int forestEdgeEvery = 4; // шаг 
+    [SerializeField] private int forestEdgeEvery = 4;
 
     [Header("Hills (контурные кольца)")]
     [SerializeField] private Color hillsRingColor = new Color(0.35f, 0.25f, 0.12f, 0.55f);
@@ -66,19 +74,17 @@ public class WorldMapRenderer : MonoBehaviour
     [SerializeField] private float hillsIsoB = 0.90f;
     [SerializeField] private float hillsBand = 0.012f;
 
-
     [Header("Dev toggles")]
-    [SerializeField] private bool debugRender = false;   // ЕДИНЫЙ флаг: враги + лагеря
+    [SerializeField] private bool debugRender = false;
     [SerializeField] private bool showBoundaries = true;
     [SerializeField] private bool showHatch = true;
 
     Texture2D tex;
-    Color[] row;
 
-    readonly List<Image> overlayStatic = new();  // столица/города/лагеря
-    readonly List<Image> overlayDynamic = new(); // враги (мобильные)
+    // Пулы
+    readonly List<Image> overlayStatic = new();   // столица/города/лагеря (с префабами — чтобы был TMP)
+    readonly List<Image> overlayDynamic = new();  // враги
     int overlayStaticIdx, overlayDynamicIdx;
-
 
     void OnEnable()
     {
@@ -88,6 +94,7 @@ public class WorldMapRenderer : MonoBehaviour
         EventBus.Subscribe<PlayerMoved>(OnPlayerMoved);
         EventBus.Subscribe<SquadSpawned>(OnSquadSpawned);
         EventBus.Subscribe<SquadDied>(OnSquadDied);
+        EventBus.Subscribe<SquadMoved>(OnSquadMoved);
     }
     void OnDisable()
     {
@@ -97,6 +104,7 @@ public class WorldMapRenderer : MonoBehaviour
         EventBus.Unsubscribe<PlayerMoved>(OnPlayerMoved);
         EventBus.Unsubscribe<SquadSpawned>(OnSquadSpawned);
         EventBus.Unsubscribe<SquadDied>(OnSquadDied);
+        EventBus.Unsubscribe<SquadMoved>(OnSquadMoved);
     }
 
     void Start()
@@ -109,19 +117,21 @@ public class WorldMapRenderer : MonoBehaviour
     void EnsureTexture()
     {
         if (tex != null) return;
-        tex = new Texture2D(texWidth, texHeight, TextureFormat.RGBA32, false);
-        tex.wrapMode = TextureWrapMode.Clamp;
-        tex.filterMode = filter;
+        tex = new Texture2D(texWidth, texHeight, TextureFormat.RGBA32, false)
+        {
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = filter
+        };
         mapImage.texture = tex;
-        row = new Color[texWidth];
     }
 
     void OnMapGenerated(MapGenerated _) => RebuildAll();
     void OnRoadBuilt(RoadBuilt _) => RebuildAll();
     void OnNodeSpawned(NodeSpawned _) => RebuildAll();
     void OnPlayerMoved(PlayerMoved _) => UpdatePlayerMarker();
-    void OnSquadSpawned(SquadSpawned e) => UpdateEnemiesOverlay();
-    void OnSquadDied(SquadDied e) => UpdateEnemiesOverlay();
+    void OnSquadSpawned(SquadSpawned _) => UpdateEnemiesOverlay();
+    void OnSquadDied(SquadDied _) => UpdateEnemiesOverlay();
+    void OnSquadMoved(SquadMoved e) { if (!e.IsGarrison) UpdateEnemiesOverlay(); }
 
     void RebuildAll()
     {
@@ -130,52 +140,46 @@ public class WorldMapRenderer : MonoBehaviour
 
         BakeBiomes();
         AddBiomeDetails();
-
         if (showHatch) DrawRegionHatch();
         if (showBoundaries) DrawRegionBoundaries();
 
-        foreach (var r in ws.Roads)
-            DrawPolyline(r.Path, roadColor, roadWidthPx);
+        foreach (var r in ws.Roads) DrawPolyline(r.Path, roadColor, roadWidthPx);
 
-        overlayStaticIdx = 0;
-        EnsureOverlayCapacity(overlayStatic, 64);
-
-        bool useCapitalIcon = capitalIconPrefab;
-        bool useCityIcon = cityIconPrefab;
+        // ----- статический оверлей -----
+        overlayStaticIdx = 0; // НЕ предзаполняем пул — нужно инстансить именно префабы с TMP!
 
         if (ws.Capital != null)
         {
-            if (useCapitalIcon) PlaceMarkerStatic(capitalIconPrefab, ws.Capital.Pos);
-            else DrawNode(ws.Capital.Pos, capitalColor, nodeRadiusPx + 1);
+            if (capitalIconPrefab)
+                PlaceMarkerStatic(capitalIconPrefab, ws.Capital.Pos, showCapitalName ? ws.Capital.Name : null, capitalSpriteVariants);
+            else
+                DrawNode(ws.Capital.Pos, capitalColor, nodeRadiusPx + 1);
         }
 
         if (ws.PlayerBase != null)
-        {
-            // для базы пока оставим точку (можно тоже префабом при желании)
             DrawNode(ws.PlayerBase.Pos, baseColor, nodeRadiusPx + 1);
-        }
 
         foreach (var c in ws.Cities)
         {
-            if (useCityIcon) PlaceMarkerStatic(cityIconPrefab, c.Pos);
-            else DrawNode(c.Pos, cityColor, nodeRadiusPx);
+            if (cityIconPrefab)
+                PlaceMarkerStatic(cityIconPrefab, c.Pos, showCityNames ? c.Name : null, citySpriteVariants);
+            else
+                DrawNode(c.Pos, cityColor, nodeRadiusPx);
         }
 
-        // Лагеря — ТОЛЬКО при debugRender
         if (debugRender)
         {
             foreach (var k in ws.Camps)
             {
-                if (campIconPrefab) PlaceMarkerStatic(campIconPrefab, k.Pos);
+                if (campIconPrefab) PlaceMarkerStatic(campIconPrefab, k.Pos, null, null);
                 else DrawNode(k.Pos, campColor, nodeRadiusPx);
             }
         }
 
         HideRest(overlayStatic, overlayStaticIdx);
-
         tex.Apply();
 
-        // ДИНАМИКА: враги (мобильные) — обновляем отдельно
+        // ----- динамика (враги) -----
         UpdateEnemiesOverlay();
     }
 
@@ -192,8 +196,7 @@ public class WorldMapRenderer : MonoBehaviour
         var ws = WorldState.Instance; if (!ws || !overlay) return;
 
         overlayDynamicIdx = 0;
-        EnsureOverlayCapacity(overlayDynamic, 64);
-        HideRest(overlayDynamic, overlayDynamicIdx); // почистим начало
+        EnsureOverlayCapacitySimple(overlayDynamic, 64); // для врагов простые Image ок
 
         if (!debugRender || !enemyIconPrefab)
         {
@@ -203,8 +206,8 @@ public class WorldMapRenderer : MonoBehaviour
 
         foreach (var s in ws.EnemySquads)
         {
-            if (s.IsGarrison) continue; // на мировой карте гарнизоны не показываем
-            var dot = GetFromPool(overlayDynamic, overlayDynamicIdx++, enemyIconPrefab);
+            if (s.IsGarrison) continue;
+            var dot = GetFromPoolSimple(overlayDynamic, overlayDynamicIdx++, enemyIconPrefab);
             dot.rectTransform.SetParent(overlay, false);
             dot.rectTransform.anchoredPosition = MapRenderUtils.WorldToOverlayAnchored(s.Pos, ws.MapHalfSize, overlay);
             dot.gameObject.SetActive(true);
@@ -213,36 +216,31 @@ public class WorldMapRenderer : MonoBehaviour
         HideRest(overlayDynamic, overlayDynamicIdx);
     }
 
+    // ========================== РЕНДЕР КАРТЫ ==========================
+
     void BakeBiomes()
     {
         var ws = WorldState.Instance; if (!ws) return;
-        bool hasBank = ws.Biomes != null;
-
         for (int y = 0; y < texHeight; y++)
-        {
             for (int x = 0; x < texWidth; x++)
             {
                 float u = x / (float)(texWidth - 1);
                 float v = y / (float)(texHeight - 1);
-                Vector2 world = new Vector2(
+                Vector2 world = new(
                     Mathf.Lerp(-ws.MapHalfSize, ws.MapHalfSize, u),
                     Mathf.Lerp(-ws.MapHalfSize, ws.MapHalfSize, v));
 
-                Color c;
-                if (hasBank)
+                if (ws.Biomes)
                 {
-                    float raw = ws.SampleBiomeRaw(world);     
-                    var biome = ws.Biomes.Evaluate(raw);      
-                    c = ws.Biomes.ColorOf(biome);           
+                    float raw = ws.SampleBiomeRaw(world);
+                    var biome = ws.Biomes.Evaluate(raw);
+                    tex.SetPixel(x, y, ws.Biomes.ColorOf(biome));
                 }
                 else
                 {
-                    c = new Color(0.1f, 0.12f, 0.1f, 1f);       
+                    tex.SetPixel(x, y, new Color(0.1f, 0.12f, 0.1f, 1f));
                 }
-
-                tex.SetPixel(x, y, c);
             }
-        }
     }
 
     void DrawRegionHatch()
@@ -251,12 +249,11 @@ public class WorldMapRenderer : MonoBehaviour
         if (ws.Regions == null || ws.Regions.Count == 0) return;
 
         for (int y = 0; y < texHeight; y++)
-        {
             for (int x = 0; x < texWidth; x++)
             {
                 float u = x / (float)(texWidth - 1);
                 float v = y / (float)(texHeight - 1);
-                Vector2 world = new Vector2(
+                Vector2 world = new(
                     Mathf.Lerp(-ws.MapHalfSize, ws.MapHalfSize, u),
                     Mathf.Lerp(-ws.MapHalfSize, ws.MapHalfSize, v));
 
@@ -265,13 +262,12 @@ public class WorldMapRenderer : MonoBehaviour
                 int s = regionHatchSpacing;
                 if (((x + y + phase) % s) < regionHatchThickness)
                 {
-                    Color baseC = tex.GetPixel(x, y);
-                    Color mix = Color.Lerp(baseC, regionHatchColor, regionHatchColor.a);
+                    var baseC = tex.GetPixel(x, y);
+                    var mix = Color.Lerp(baseC, regionHatchColor, regionHatchColor.a);
                     mix.a = 1f;
                     tex.SetPixel(x, y, mix);
                 }
             }
-        }
     }
 
     void DrawRegionBoundaries()
@@ -280,7 +276,6 @@ public class WorldMapRenderer : MonoBehaviour
         if (ws.Regions == null || ws.Regions.Count == 0) return;
 
         for (int y = 1; y < texHeight; y++)
-        {
             for (int x = 1; x < texWidth; x++)
             {
                 Vector2 world = PixelToWorld(ws, x, y);
@@ -294,7 +289,6 @@ public class WorldMapRenderer : MonoBehaviour
                 if (id != idL || id != idB)
                     tex.SetPixel(x, y, regionBorderColor);
             }
-        }
     }
 
     Vector2 PixelToWorld(WorldState ws, int x, int y)
@@ -363,6 +357,8 @@ public class WorldMapRenderer : MonoBehaviour
         }
     }
 
+    // ========================== БИОМ-детали (как были) ==========================
+
     void AddBiomeDetails()
     {
         var ws = WorldState.Instance; if (!ws || !ws.Biomes) return;
@@ -387,12 +383,11 @@ public class WorldMapRenderer : MonoBehaviour
         if (drawForestEdgeDots)
         {
             for (int y = 1; y < texHeight - 1; y++)
-            {
                 for (int x = 1; x < texWidth - 1; x++)
                 {
                     if (BiomeAtPixel(ws, x, y) != Biome.Forest) continue;
-                    if (!IsEdge(ws, x, y)) continue;                
-                    if (((x + y) % forestEdgeEvery) != 0) continue; 
+                    if (!IsEdge(ws, x, y)) continue;
+                    if (((x + y) % forestEdgeEvery) != 0) continue;
 
                     Vector2 n = RawGrad(ws, x, y).normalized;
                     Vector2 p = new Vector2(x, y) - n * 2.0f;
@@ -402,7 +397,6 @@ public class WorldMapRenderer : MonoBehaviour
                     if (BiomeAtPixel(ws, px, py) == Biome.Forest)
                         DrawDisc(px, py, forestDotR, forestDotColor);
                 }
-            }
         }
 
         if (drawPlainsStrokes)
@@ -450,7 +444,7 @@ public class WorldMapRenderer : MonoBehaviour
     {
         float u = x / (float)(texWidth - 1);
         float v = y / (float)(texHeight - 1);
-        Vector2 w = new Vector2(
+        Vector2 w = new(
             Mathf.Lerp(-ws.MapHalfSize, ws.MapHalfSize, u),
             Mathf.Lerp(-ws.MapHalfSize, ws.MapHalfSize, v));
         return ws.SampleBiomeRaw(w);
@@ -459,7 +453,6 @@ public class WorldMapRenderer : MonoBehaviour
     Vector2 RawGrad(WorldState ws, int x, int y)
     {
         const int d = 1;
-        float c = Raw(ws, x, y);
         float rx = Raw(ws, Mathf.Clamp(x + d, 0, texWidth - 1), y) - Raw(ws, Mathf.Clamp(x - d, 0, texWidth - 1), y);
         float ry = Raw(ws, x, Mathf.Clamp(y + d, 0, texHeight - 1)) - Raw(ws, x, Mathf.Clamp(y - d, 0, texHeight - 1));
         return new Vector2(rx, ry);
@@ -470,11 +463,10 @@ public class WorldMapRenderer : MonoBehaviour
     bool IsEdge(WorldState ws, int x, int y)
     {
         var b = BiomeAtPixel(ws, x, y);
-        if (BiomeAtPixel(ws, x - 1, y) != b) return true;
-        if (BiomeAtPixel(ws, x + 1, y) != b) return true;
-        if (BiomeAtPixel(ws, x, y - 1) != b) return true;
-        if (BiomeAtPixel(ws, x, y + 1) != b) return true;
-        return false;
+        return BiomeAtPixel(ws, x - 1, y) != b
+            || BiomeAtPixel(ws, x + 1, y) != b
+            || BiomeAtPixel(ws, x, y - 1) != b
+            || BiomeAtPixel(ws, x, y + 1) != b;
     }
 
     Biome BiomeAtPixel(WorldState ws, int x, int y)
@@ -485,7 +477,7 @@ public class WorldMapRenderer : MonoBehaviour
         return ws.Biomes ? ws.Biomes.Evaluate(v) : Biome.Plains;
     }
 
-    Vector2Int RoundToInt(Vector2 v) => new Vector2Int(Mathf.RoundToInt(v.x), Mathf.RoundToInt(v.y));
+    Vector2Int RoundToInt(Vector2 v) => new(Mathf.RoundToInt(v.x), Mathf.RoundToInt(v.y));
 
     int Hash1D(int a, int seed) { unchecked { int h = seed; h = (h * 16777619) ^ a; h ^= (h >> 13); return h & 0x7fffffff; } }
     int Hash2D(int x, int y, int seed)
@@ -520,21 +512,75 @@ public class WorldMapRenderer : MonoBehaviour
 
     float Jitter(int x, int y, float amplitude)
     {
-        int h = Hash2D(x, y, 0x2F6E2B1);               
-        float r = (h & 0x7fffffff) / 2147483647f;      
-        return (r * 2f - 1f) * amplitude;           
+        int h = Hash2D(x, y, 0x2F6E2B1);
+        float r = (h & 0x7fffffff) / 2147483647f;
+        return (r * 2f - 1f) * amplitude;
     }
 
-    void PlaceMarkerStatic(Image prefab, Vector2 worldPos)
+    // ========================== МАРКЕРЫ ==========================
+
+    void PlaceMarkerStatic(Image prefab, Vector2 worldPos, string labelText, List<Sprite> variants)
     {
-        var ws = WorldState.Instance; if (!ws || !overlay || !prefab) return;
-        var img = GetFromPool(overlayStatic, overlayStaticIdx++, prefab);
+        if (!overlay || !prefab) return;
+        var ws = WorldState.Instance; if (!ws) return;
+
+        var img = GetFromPoolPrefab(overlayStatic, overlayStaticIdx++, prefab);
         img.rectTransform.SetParent(overlay, false);
         img.rectTransform.anchoredPosition = MapRenderUtils.WorldToOverlayAnchored(worldPos, ws.MapHalfSize, overlay);
+
+        // Рандомный спрайт из списка (если он задан)
+        if (variants != null && variants.Count > 0)
+        {
+            var pick = variants[Random.Range(0, variants.Count)];
+            if (pick) img.sprite = pick;
+        }
+        else
+        {
+            img.sprite = prefab.sprite; // дефолт
+        }
+
+        // Подпись (TMP) — ищем в детях префаба
+        var label = img.GetComponentInChildren<TMP_Text>(true);
+        if (label)
+        {
+            if (!string.IsNullOrEmpty(labelText))
+            {
+                label.text = labelText;
+                label.gameObject.SetActive(true);
+            }
+            else
+            {
+                label.text = string.Empty;
+                label.gameObject.SetActive(false);
+            }
+        }
+
         img.gameObject.SetActive(true);
     }
 
-    Image GetFromPool(List<Image> pool, int index, Image prefab)
+    // инстансим ИМЕННО префаб (с его дочерними объектами), чтобы был TMP
+    Image GetFromPoolPrefab(List<Image> pool, int index, Image prefab)
+    {
+        if (index < pool.Count && pool[index] != null)
+        {
+            var it = pool[index];
+            // сбрасываем базовые параметры под префаб
+            it.color = prefab.color;
+            it.rectTransform.sizeDelta = prefab.rectTransform.sizeDelta;
+            return it;
+        }
+        else
+        {
+            var created = Instantiate(prefab, overlay);
+            if (index >= pool.Count) pool.Add(created);
+            else pool[index] = created;
+            created.gameObject.SetActive(false);
+            return created;
+        }
+    }
+
+    // простой пул без префаба (для точек врагов)
+    Image GetFromPoolSimple(List<Image> pool, int index, Image prefab)
     {
         if (index < pool.Count && pool[index] != null)
         {
@@ -554,12 +600,11 @@ public class WorldMapRenderer : MonoBehaviour
         }
     }
 
-    void EnsureOverlayCapacity(List<Image> pool, int min)
+    void EnsureOverlayCapacitySimple(List<Image> pool, int min)
     {
         while (pool.Count < min)
         {
-            var go = new GameObject("marker", typeof(RectTransform), typeof(Image));
-            var img = go.GetComponent<Image>();
+            var img = new GameObject("marker", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
             img.gameObject.SetActive(false);
             pool.Add(img);
         }

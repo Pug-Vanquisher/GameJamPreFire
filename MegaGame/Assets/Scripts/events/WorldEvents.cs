@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using static TreeEditor.TreeEditorHelper;
 
 namespace Events
 {
@@ -93,4 +92,95 @@ namespace Events
         public GarrisonCountChanged(string nodeId, int remaining)
         { NodeId = nodeId; Remaining = remaining; }
     }
+
+    public readonly struct SquadMoved
+    {
+        public readonly string SquadId;
+        public readonly Vector2 Pos;
+        public readonly bool IsGarrison;
+
+        public SquadMoved(string squadId, Vector2 pos, bool isGarrison)
+        { SquadId = squadId; Pos = pos; IsGarrison = isGarrison; }
+    }
+        public readonly struct VisibleTargetsChanged { }
+
+    public enum NodeKind { City, Camp }
+
+    public readonly struct EnemyPlannedMove
+    {
+        public readonly string SquadId;
+        public readonly string Callsign;
+        public readonly NodeKind DestKind;
+        public readonly string DestId;
+        public readonly UnityEngine.Vector2 DestPos;
+        public readonly string DestName;
+        public EnemyPlannedMove(string squadId, string callsign, NodeKind kind, string destId, string destName, UnityEngine.Vector2 destPos)
+        { SquadId = squadId; Callsign = callsign; DestKind = kind; DestId = destId; DestName = destName; DestPos = destPos; }
+    }
+
+    public readonly struct EnemyRetreatDeclared
+    {
+        public readonly string SquadId;
+        public readonly string Callsign;
+        public readonly UnityEngine.Vector2 FromPos;
+        public readonly string DestId;
+        public readonly UnityEngine.Vector2 DestPos;
+        public EnemyRetreatDeclared(string squadId, string callsign, UnityEngine.Vector2 fromPos, string destId, UnityEngine.Vector2 destPos)
+        { SquadId = squadId; Callsign = callsign; FromPos = fromPos; DestId = destId; DestPos = destPos; }
+    }
+
+    public readonly struct PlayerFired
+    {
+        public readonly Vector2 Pos;
+        public PlayerFired(Vector2 pos) { Pos = pos; }
+    }
+
+    public readonly struct EnemyHeardShots
+    {
+        public readonly string SquadId, Callsign;
+        public readonly int DirIndex; // 0..7 (N,NE,E,SE,S,SW,W,NW)
+        public EnemyHeardShots(string id, string call, int dir) { SquadId = id; Callsign = call; DirIndex = dir; }
+    }
+
+    public readonly struct EnemyHelpAccepted
+    {
+        public readonly string ResponderId, ResponderCallsign, RequesterCallsign;
+        public EnemyHelpAccepted(string id, string responder, string requester)
+        { ResponderId = id; ResponderCallsign = responder; RequesterCallsign = requester; }
+    }
+
+    public enum SupplyKind { Ammo, Meds }
+
+    public readonly struct EnemyResupplied
+    {
+        public readonly string SquadId, Callsign;
+        public readonly NodeKind DestKind;      // City/Camp
+        public readonly string DestId, DestName;
+        public readonly SupplyKind Kind;
+        public readonly int Amount;
+        public readonly Vector2 DestPos;
+
+        public EnemyResupplied(string squadId, string callsign, NodeKind destKind, string destId, string destName,
+                               SupplyKind kind, int amount, Vector2 destPos)
+        {
+            SquadId = squadId; Callsign = callsign; DestKind = destKind; DestId = destId; DestName = destName;
+            Kind = kind; Amount = amount; DestPos = destPos;
+        }
+    }
+
+    public readonly struct EnemyEngaged
+    {
+        public readonly string SquadId, Callsign;
+        public EnemyEngaged(string id, string call) { SquadId = id; Callsign = call; }
+    }
+
+    public readonly struct ReinforcementRequested
+    {
+        public readonly string CallerId, CallerCallsign;
+        public readonly Vector2 Pos;
+        public readonly float Radius;
+        public ReinforcementRequested(string id, string call, Vector2 pos, float radius)
+        { CallerId = id; CallerCallsign = call; Pos = pos; Radius = radius; }
+    }
+
 }
