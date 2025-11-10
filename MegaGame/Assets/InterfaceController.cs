@@ -113,7 +113,7 @@ public class InterfaceController : MonoBehaviour
 
     void Update()
     {
-        SetMapTexture(mapMesh, mapImage);
+
         CameraTrackMouse();
         HandleMouse();
 

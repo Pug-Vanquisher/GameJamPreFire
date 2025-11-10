@@ -12,6 +12,7 @@ public class WorldMapRenderer : MonoBehaviour
     [SerializeField] private Image playerMarker;
 
     [Header("Prefabs")]
+    [SerializeField] private Image baseIconPrefab;
     [SerializeField] private Image cityIconPrefab;      // у префаба сверху — TMP_Text (название)
     [SerializeField] private Image capitalIconPrefab;   // у префаба сверху — TMP_Text (название)
     [SerializeField] private Image enemyIconPrefab;
@@ -157,7 +158,12 @@ public class WorldMapRenderer : MonoBehaviour
         }
 
         if (ws.PlayerBase != null)
-            DrawNode(ws.PlayerBase.Pos, baseColor, nodeRadiusPx + 1);
+        {
+            if (baseIconPrefab)
+                PlaceMarkerStatic(baseIconPrefab, ws.PlayerBase.Pos, null, null);
+            else
+                DrawNode(ws.PlayerBase.Pos, baseColor, nodeRadiusPx + 1);
+        }
 
         foreach (var c in ws.Cities)
         {
