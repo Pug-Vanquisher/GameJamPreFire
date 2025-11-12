@@ -24,7 +24,7 @@ MonoBehaviour:
   biomeDetailSeed: 1337
   biomeNoiseEpsilon: 0.0357
   biomeProbeRadius: 120
-  citiesCount: 14
+  citiesCount: 12
   campsCount: 8
   minNodeSpacing: 2800
   capitalSafeRadius: 1300

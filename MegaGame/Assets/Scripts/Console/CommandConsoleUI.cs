@@ -1,11 +1,11 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using TMPro;
 using UnityEngine;
 using Events;
+using UnityEngine.Playables;
 
 public class CommandConsoleUI : MonoBehaviour
 {
@@ -31,7 +31,7 @@ public class CommandConsoleUI : MonoBehaviour
     [Header("Targeting")]
     [SerializeField] private bool useRadarRangeForTargets = true;
 
-    private enum Menu { Root, Combat, Diagnostics, AttackList, Move }
+    private enum Menu { Root, Combat, Diagnostics, AttackList }
     private readonly Stack<Menu> stack = new();
 
     private struct TargetInfo { public string id; public string label; public Vector2 pos; }
@@ -39,35 +39,27 @@ public class CommandConsoleUI : MonoBehaviour
 
     private bool busy;
     private string busyTitle;
-
-    // локальный флаг, чтобы не слать лишние ивенты
-    private bool moveModeActive = false;
-    private void SetMoveMode(bool active)
-    {
-        if (moveModeActive == active) return;
-        moveModeActive = active;
-        EventBus.Publish(new ConsoleMoveModeChanged(active));
-    }
+    private bool externalLockActive;
 
     void OnEnable()
     {
         EventBus.Subscribe<VisibleTargetsChanged>(OnVisibleTargetsChanged);
         EventBus.Subscribe<RunStarted>(OnRunStarted);
+        EventBus.Subscribe<SelfDestructLockChanged>(OnSelfDestructLockChanged); // <— НОВОЕ
         if (screen) RenderMenu(Menu.Root);
-        SetMoveMode(false);
     }
+
     void OnDisable()
     {
         EventBus.Unsubscribe<VisibleTargetsChanged>(OnVisibleTargetsChanged);
         EventBus.Unsubscribe<RunStarted>(OnRunStarted);
-        SetMoveMode(false);
+        EventBus.Unsubscribe<SelfDestructLockChanged>(OnSelfDestructLockChanged); // <— НОВОЕ
     }
 
     void OnRunStarted(RunStarted _)
     {
         stack.Clear();
         RenderMenu(Menu.Root);
-        SetMoveMode(false);
     }
 
     void Update()
@@ -77,22 +69,21 @@ public class CommandConsoleUI : MonoBehaviour
         for (int d = 0; d <= 9; d++)
             if (Input.GetKeyDown(KeyCode.Alpha0 + d) || Input.GetKeyDown(KeyCode.Keypad0 + d))
                 PressDigit(d);
+    }
 
-        if (CurrentMenu == Menu.Move)
+    void OnSelfDestructLockChanged(SelfDestructLockChanged e)
+    {
+        externalLockActive = e.Active;
+        if (externalLockActive)
         {
-            Vector2 dir = Vector2.zero;
-            if (Input.GetKey(KeyCode.Keypad8)) dir += Vector2.up;     // Север
-            if (Input.GetKey(KeyCode.Keypad2)) dir += Vector2.down;   // Юг
-            if (Input.GetKey(KeyCode.Keypad6)) dir += Vector2.right;  // Восток
-            if (Input.GetKey(KeyCode.Keypad4)) dir += Vector2.left;   // Запад
-
-            if (Input.GetKey(KeyCode.UpArrow)) dir += Vector2.up;
-            if (Input.GetKey(KeyCode.DownArrow)) dir += Vector2.down;
-            if (Input.GetKey(KeyCode.RightArrow)) dir += Vector2.right;
-            if (Input.GetKey(KeyCode.LeftArrow)) dir += Vector2.left;
-
-            if (dir.sqrMagnitude > 1f) dir.Normalize();
-            EventBus.Publish(new ConsoleMoveInput(dir));
+            // мгновенно сообщим игроку
+            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
+                "Командная консоль заблокирована: выполняется протокол самоуничтожения."));
+        }
+        else
+        {
+            EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
+                "Командная консоль разблокирована."));
         }
     }
 
@@ -107,8 +98,10 @@ public class CommandConsoleUI : MonoBehaviour
 
     public void PressDigit(int d)
     {
+        if (externalLockActive) return;
+
         var m = CurrentMenu;
-        if (d == 0) { if (m != Menu.Root) { stack.Pop(); RenderMenu(CurrentMenu); SetMoveMode(CurrentMenu == Menu.Move); } return; }
+        if (d == 0) { if (m != Menu.Root) { stack.Pop(); RenderMenu(CurrentMenu); } return; }
 
         switch (m)
         {
@@ -116,7 +109,6 @@ public class CommandConsoleUI : MonoBehaviour
             case Menu.Combat: HandleCombat(d); break;
             case Menu.Diagnostics: HandleDiagnostics(d); break;
             case Menu.AttackList: HandleAttackList(d); break;
-            case Menu.Move: HandleMoveMenu(d); break;
         }
     }
 
@@ -132,8 +124,7 @@ public class CommandConsoleUI : MonoBehaviour
             sb.AppendLine("[1] Осмотр");
             sb.AppendLine("[2] Бой >");
             sb.AppendLine("[3] Диагностика >");
-            sb.AppendLine("[4] Движение >");
-            sb.AppendLine("[5] Задачи");
+            sb.AppendLine("[4] Задачи");
             sb.AppendLine();
             sb.AppendLine("[9] Прокрутка логов ↑");
             sb.AppendLine("[6] Прокрутка логов ↓");
@@ -158,14 +149,6 @@ public class CommandConsoleUI : MonoBehaviour
                     sb.AppendLine($"[{i + 1}] Атаковать цель {attackTargets[i].label}");
             sb.AppendLine("[0] Назад");
         }
-        else if (m == Menu.Move)
-        {
-            sb.AppendLine("[8] Север  (удерживать)");
-            sb.AppendLine("[2] Юг     (удерживать)");
-            sb.AppendLine("[6] Восток (удерживать)");
-            sb.AppendLine("[4] Запад  (удерживать)");
-            sb.AppendLine("[0] Назад");
-        }
 
         screen.text = sb.ToString();
     }
@@ -173,11 +156,9 @@ public class CommandConsoleUI : MonoBehaviour
     void HandleRoot(int d)
     {
         if (d == 1) { StartCommand("Осмотр", delayScan, DoScanNow); return; }
-        if (d == 2) { stack.Push(Menu.Combat); RenderMenu(Menu.Combat); SetMoveMode(false); return; }
-        if (d == 3) { stack.Push(Menu.Diagnostics); RenderMenu(Menu.Diagnostics); SetMoveMode(false); return; }
-        if (d == 4) { stack.Push(Menu.Move); RenderMenu(Menu.Move); SetMoveMode(true); return; }
-
-        if (d == 5) { GameRunManager.Instance?.AnnounceObjectives(); return; }
+        if (d == 2) { stack.Push(Menu.Combat); RenderMenu(Menu.Combat); return; }
+        if (d == 3) { stack.Push(Menu.Diagnostics); RenderMenu(Menu.Diagnostics); return; }
+        if (d == 4) { GameRunManager.Instance?.AnnounceObjectives(); return; } // как раньше — Задачи
 
         if (d == 9) { EventBus.Publish(new ConsoleScrollRequest(+1f)); return; }
         if (d == 6) { EventBus.Publish(new ConsoleScrollRequest(-1f)); return; }
@@ -190,7 +171,6 @@ public class CommandConsoleUI : MonoBehaviour
             BuildAttackTargetsFromRegistry();
             stack.Push(Menu.AttackList);
             RenderMenu(Menu.AttackList);
-            SetMoveMode(false);
             return;
         }
         if (d == 2)
@@ -233,11 +213,6 @@ public class CommandConsoleUI : MonoBehaviour
         if ((uint)idx >= (uint)attackTargets.Count) return;
         var t = attackTargets[idx];
         StartCommand($"Атака {t.label}", delayAttack, () => PerformFireAtTarget(t));
-    }
-
-    void HandleMoveMenu(int d)
-    {
-        if (d == 0) { stack.Pop(); RenderMenu(CurrentMenu); SetMoveMode(false); }
     }
 
     // ====== задержки команд ======
@@ -393,14 +368,5 @@ public class CommandConsoleUI : MonoBehaviour
         Vector2 d = to - from; if (d.sqrMagnitude < 1e-6f) return 0;
         float ang = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; if (ang < 0f) ang += 360f;
         return Mathf.RoundToInt(ang / 45f) & 7;
-    }
-}
-
-namespace Events
-{
-    public struct ConsoleMoveModeChanged
-    {
-        public bool Active;
-        public ConsoleMoveModeChanged(bool active) { Active = active; }
     }
 }
