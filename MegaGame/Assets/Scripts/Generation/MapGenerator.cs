@@ -12,7 +12,7 @@ public class MapGenerator : MonoBehaviour
     [SerializeField] private CallsignBank callsigns;
 
     [Header("Boot/Async")]
-    [SerializeField] private bool autoGenerateOnStart = true;  // можно выключать и дергать GenerateAsync вручную из Boot
+    [SerializeField] private bool autoGenerateOnStart = true;
 
     private System.Random rng;
     private WorldState world;
@@ -26,9 +26,6 @@ public class MapGenerator : MonoBehaviour
             StartCoroutine(GenerateAsync(null));
     }
 
-    /// <summary>
-    /// Полная асинхронная генерация мира с прогрессом (0..1).
-    /// </summary>
     public IEnumerator GenerateAsync(System.Action<float> onProgress)
     {
         if (!config)
@@ -39,26 +36,34 @@ public class MapGenerator : MonoBehaviour
 
         float Report(float a) { onProgress?.Invoke(a); return a; }
 
+        // --- общий сид и привязка биомов к нему ---
         int seed = config.useSystemTimeSeed ? System.Environment.TickCount : config.seed;
         rng = new System.Random(seed);
 
-        // Чистим/готовим мир
+        // --- мир/стейт ---
         world = WorldState.Instance ?? new GameObject("[WorldState]").AddComponent<WorldState>();
         world.Cities.Clear(); world.Camps.Clear(); world.EnemySquads.Clear(); world.Roads.Clear(); world.Regions.Clear();
+
+        int biomeSeed = unchecked((int)(seed ^ 0x9E3779B9)); // производное от общего сида (детерминированно от seed)
         world.InitGlobals(
             config.mapHalfSize,
             biomes,
             config.biomeFrequency, config.biomeFrequency2,
             config.biomeBlend,
-            config.biomeDetailSeed
-        );
+            biomeSeed
+        ); // биом-оффсеты и пр. (как было) :contentReference[oaicite:3]{index=3}
+
+        // --- игровая зона (mapHalfSize - edgeBuffer - offset) ---
+        world.SetPlayableZone(config.mapHalfSize, config.edgeBufferWidth, config.spawnOffsetFromBuffer);
+
         Report(0.03f);
         yield return null;
 
-        // Регионы (вороной-семена)
+        // --- регионы (семена Вороного) ---
         var used = new List<Vector2>();
         for (int i = 0; i < config.regionSeeds; i++)
         {
+            // Семена регионов можно кидать по всей карте — это топология, не «объекты».
             Vector2 p = SamplePosUnique(used, config.regionSeedMinSpacing, config.mapHalfSize);
             world.Regions.Add(new WorldState.RegionSeed { Id = i, Pos = p });
             used.Add(p);
@@ -70,27 +75,30 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
-        // Быстрый оповещатель регионов (на Debug-рендер)
+        // Быстрый алерт регионов на дебаг-рендер
         for (int i = 0; i < world.Regions.Count; i++)
             EventBus.Publish(new RegionCreated(i, RegionRectApprox(world.Regions[i].Pos)));
 
         Report(0.16f);
         yield return null;
 
-        // Столица
+        // --- столица в центре ---
         var capital = new NodeData("capital", "Столица", NodeType.Capital, Faction.Player,
                                    Vector2.zero, world.GetRegionId(Vector2.zero), "plain", true);
         world.SetCapital(capital);
         EventBus.Publish(new NodeSpawned(capital.Id, capital.Name, capital.Pos, capital.RegionId, capital.Type, true));
+
         Report(0.18f);
         yield return null;
 
-        // Города
+        // --- города ---
         used.Clear(); used.Add(capital.Pos);
         var usedCityNames = new HashSet<string>(); usedCityNames.Add("Столица");
         for (int i = 0; i < config.citiesCount; i++)
         {
-            if (!TryPlaceNode(out var pos, out var regionId, out var biomeKey, true)) { i--; continue; }
+            if (!TryPlaceNodeInsidePlayable(out var pos, out var regionId, out var biomeKey, true))
+            { i--; continue; }
+
             string name = names ? names.PickCityNameUnique(rng, usedCityNames) : $"Город-{rng.Next(1000, 9999)}";
 
             var node = new NodeData($"city_{i}", name, NodeType.City, Faction.Neutral, pos, regionId, biomeKey);
@@ -113,13 +121,16 @@ public class MapGenerator : MonoBehaviour
                 yield return null;
             }
         }
+
         Report(0.60f);
         yield return null;
 
-        // Лагеря
+        // --- лагеря ---
         for (int i = 0; i < config.campsCount; i++)
         {
-            if (!TryPlaceNode(out var pos, out var regionId, out var biomeKey, false)) { i--; continue; }
+            if (!TryPlaceNodeInsidePlayable(out var pos, out var regionId, out var biomeKey, false))
+            { i--; continue; }
+
             string name = names ? names.PickCampName(rng) : $"Застава {i + 1}";
 
             var node = new NodeData($"camp_{i}", name, NodeType.Camp, Faction.Enemy, pos, regionId, biomeKey);
@@ -142,45 +153,36 @@ public class MapGenerator : MonoBehaviour
                 yield return null;
             }
         }
+
         Report(0.75f);
         yield return null;
 
-        // База игрока
+        // --- база/спавн игрока (внутри playable и далеко от узлов) ---
         {
-            float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
-            Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
-            Vector2 basePos = ClampToMap(capital.Pos + dir * config.playerBaseDistanceFromCapital, config.mapHalfSize);
-
-            for (int tries = 0; tries < 80; tries++)
-            {
-                if (AcceptsPlacement(basePos, true)) break;
-                ang = (float)rng.NextDouble() * Mathf.PI * 2f;
-                dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
-                basePos = ClampToMap(capital.Pos + dir * config.playerBaseDistanceFromCapital, config.mapHalfSize);
-            }
+            Vector2 basePos = PickPlayerBasePosSafe();
             var baseNode = new NodeData("player_base", "База", NodeType.Base, Faction.Player,
                                         basePos, world.GetRegionId(basePos), world.SampleBiome(basePos).ToString());
             world.SetPlayerBase(baseNode, basePos);
             EventBus.Publish(new NodeSpawned(baseNode.Id, baseNode.Name, baseNode.Pos, baseNode.RegionId, baseNode.Type));
         }
+
         Report(0.78f);
         yield return null;
 
-        // Враги — асинхронно (гарнизоны + мобильные)
+        // --- враги (гарнизоны + мобильные) ---
         yield return StartCoroutine(GenerateEnemiesAsync(0.78f, 0.92f, onProgress));
 
-        // Дороги — асинхронно (MST + доп.ребра + извилистость)
+        // --- дороги ---
         yield return StartCoroutine(BuildRoadsAsync(0.92f, 0.99f, onProgress));
 
-        // Финал
+        // --- финал ---
         EventBus.Publish(new MapGenerated(seed));
         Debug.Log($"[MapGen] seed {seed} | cities:{world.Cities.Count} camps:{world.Camps.Count} roads:{world.Roads.Count}");
         Report(1f);
     }
 
-    /// <summary>
-    /// Асинхронный спавн всех врагов: гарнизоны городов/лагерей + мобильные отряды.
-    /// </summary>
+    // -------------------- Спавн врагов --------------------
+
     private IEnumerator GenerateEnemiesAsync(float from, float to, System.Action<float> onProgress)
     {
         var ws = WorldState.Instance; if (!ws) yield break;
@@ -198,7 +200,7 @@ public class MapGenerator : MonoBehaviour
             return EnemyPersonality.Aggressive;
         }
 
-        // Оценим общий объём работы для плавного прогресса
+        // Прогресс — прикидываем объём
         int total = 0;
         foreach (var c in ws.Cities) total += Mathf.Max(0, c.Garrison);
         foreach (var k in ws.Camps) total += Mathf.Max(0, k.Garrison);
@@ -208,7 +210,7 @@ public class MapGenerator : MonoBehaviour
         int done = 0;
         int yieldStep = 16;
 
-        // --- Гарнизоны в городах ---
+        // --- гарнизоны городов ---
         foreach (var city in ws.Cities)
         {
             if (city.Garrison <= 0) continue;
@@ -218,7 +220,7 @@ public class MapGenerator : MonoBehaviour
             float sep = Mathf.Max(10f, config.garrisonMinSeparation);
             float angleStep = 360f / Mathf.Max(1, count);
 
-            var usedNumbers = new HashSet<int>(); // 1..30 — уникальные номера для позывного "<CityName>-N"
+            var usedNumbers = new HashSet<int>(); // 1..30 для уникальности суффикса
 
             for (int k = 0; k < count; k++)
             {
@@ -231,7 +233,7 @@ public class MapGenerator : MonoBehaviour
                 float ang = (angleStep * k + rng.Next(-10, 11)) * Mathf.Deg2Rad;
                 Vector2 basePos = city.Pos + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * R;
 
-                // раздвижка, чтобы не прилипали
+                // раздвижка
                 int repel = 0;
                 while (repel++ < 30)
                 {
@@ -262,7 +264,7 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
-        // --- Гарнизоны в лагерях ---
+        // --- гарнизоны лагерей ---
         foreach (var camp in ws.Camps)
         {
             if (camp.Garrison <= 0) continue;
@@ -272,7 +274,7 @@ public class MapGenerator : MonoBehaviour
             float sep = Mathf.Max(10f, config.garrisonMinSeparation);
             float angleStep = 360f / Mathf.Max(1, count);
 
-            var usedNumbers = new HashSet<int>(); // 1..30
+            var usedNumbers = new HashSet<int>();
 
             for (int k = 0; k < count; k++)
             {
@@ -315,7 +317,7 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
-        // --- Мобильные отряды ---
+        // --- мобильные отряды ---
         for (int m = 0; m < config.enemySquads; m++)
         {
             bool fromCity = rng.Next(100) < 70 || ws.Camps.Count == 0 || ws.Cities.Count == 0;
@@ -325,16 +327,29 @@ public class MapGenerator : MonoBehaviour
 
             Vector2 pos = src.Pos + Random.insideUnitCircle * 50f;
 
+            // Уважать безопасную зону вокруг спавна игрока
+            if (config.enemyMinDistanceFromPlayer > 0f)
+            {
+                int guard = 0;
+                while ((pos - ws.PlayerSpawn).sqrMagnitude < config.enemyMinDistanceFromPlayer * config.enemyMinDistanceFromPlayer
+                       && guard++ < 32)
+                {
+                    pos = src.Pos + Random.insideUnitCircle * 80f;
+                }
+            }
+
+            // Заодно не вылезать в буфер по краям
+            int clipGuard = 0;
+            while (!world.IsInsidePlayable(pos) && clipGuard++ < 16)
+            {
+                pos = Vector2.Lerp(src.Pos, ws.PlayerSpawn, (float)rng.NextDouble());
+            }
+
             var sq = new SquadData($"squad_{m}", pos, src.RegionId, 1);
             sq.Persona = PickPersona();
 
             if (callsigns != null) sq.Callsign = callsigns.TakeUnique(rng, usedCallsigns);
-            else
-            {
-                string tmp = $"Враг-{rng.Next(100, 999)}";
-                usedCallsigns.Add(tmp);
-                sq.Callsign = tmp;
-            }
+            else { string tmp = $"Враг-{rng.Next(100, 999)}"; usedCallsigns.Add(tmp); sq.Callsign = tmp; }
 
             sq.Firepower = (sq.Persona == EnemyPersonality.Cowardly) ? 0.8f :
                            (sq.Persona == EnemyPersonality.Aggressive) ? 1.2f : 1.0f;
@@ -352,9 +367,8 @@ public class MapGenerator : MonoBehaviour
         Report01(1f);
     }
 
-    /// <summary>
-    /// Асинхронная постройка дорожной сети: MST + дополнительные рёбра, с прогрессом.
-    /// </summary>
+    // -------------------- Дороги --------------------
+
     private IEnumerator BuildRoadsAsync(float from, float to, System.Action<float> onProgress)
     {
         var ws = WorldState.Instance; if (!ws) yield break;
@@ -366,18 +380,14 @@ public class MapGenerator : MonoBehaviour
         if (ws.Capital != null) nodes.Add(ws.Capital);
         nodes.AddRange(ws.Cities);
 
-        // 1) K-NN кандидаты (синхронно — их немного при наших размерах)
         int k = Mathf.Max(2, config.roadKNearest);
         var candidateEdges = KNearestEdges(nodes, k);
-
-        // 2) MST по кандидатам
         var mst = BuildMST(nodes.Count, candidateEdges);
 
         int total = mst.Count + Mathf.Max(0, config.extraConnections);
         total = Mathf.Max(1, total);
         int done = 0;
 
-        // 3) Добавляем рёбра MST
         foreach (var e in mst)
         {
             AddRoadEdge(nodes[e.a], nodes[e.b]);
@@ -385,12 +395,10 @@ public class MapGenerator : MonoBehaviour
             if ((done & 3) == 0) { Report01(done / (float)total); yield return null; }
         }
 
-        // 4) Доп. соединения
         for (int i = 0; i < config.extraConnections; i++)
         {
             var extra = PickExtraEdge(nodes, mst, candidateEdges);
             if (extra.a >= 0) AddRoadEdge(nodes[extra.a], nodes[extra.b]);
-
             done++;
             if ((done & 1) == 0) { Report01(done / (float)total); yield return null; }
         }
@@ -398,18 +406,20 @@ public class MapGenerator : MonoBehaviour
         Report01(1f);
     }
 
-    // -------------------- Вспомогательные методы размещения --------------------
+    // -------------------- Размещение узлов/помощники --------------------
 
-    private bool TryPlaceNode(out Vector2 pos, out int regionId, out string biomeKey, bool isCity)
+    private bool TryPlaceNodeInsidePlayable(out Vector2 pos, out int regionId, out string biomeKey, bool isCity)
     {
-        float half = config.mapHalfSize;
+        float half = world.PlayableHalfSize; // внутри игровой зоны, не у краёв
         for (int tries = 0; tries < 200; tries++)
         {
             pos = new Vector2(
                 Mathf.Lerp(-half, half, (float)rng.NextDouble()),
                 Mathf.Lerp(-half, half, (float)rng.NextDouble())
             );
-            if (pos.magnitude < config.capitalSafeRadius) continue; // держим столицы зону чистой
+
+            // Дополнительно — держать зону столицы
+            if (pos.magnitude < config.capitalSafeRadius) continue;
 
             if (!AcceptsPlacement(pos, isCity)) continue;
 
@@ -423,6 +433,8 @@ public class MapGenerator : MonoBehaviour
 
     private bool AcceptsPlacement(Vector2 pos, bool isCity)
     {
+        if (!world.IsInsidePlayable(pos)) return false; // уважаем буфер по периметру
+
         float d1, d2; int reg = world.GetRegionId(pos, out d1, out d2);
         if (reg < 0) return false;
         if ((d2 - d1) < config.regionSafeMargin) return false; // не на границе регионов
@@ -432,7 +444,6 @@ public class MapGenerator : MonoBehaviour
         if (!StableBiomeNeighborhood(pos, world.SampleBiome(pos))) return false;            // устойчивость окружения
 
         if (!FarFromExisting(pos, config.minNodeSpacing)) return false;                    // не рядом с другими узлами
-
         return true;
     }
 
@@ -458,6 +469,52 @@ public class MapGenerator : MonoBehaviour
         foreach (var n in world.Cities) if ((pos - n.Pos).sqrMagnitude < d2) return false;
         foreach (var n in world.Camps) if ((pos - n.Pos).sqrMagnitude < d2) return false;
         return true;
+    }
+
+    private Vector2 PickPlayerBasePosSafe()
+    {
+        float half = world.PlayableHalfSize;
+        float clear = Mathf.Max(0f, config.playerSpawnClearRadius);
+        float clear2 = clear * clear;
+
+        // Собираем запрещённые точки (города/лагеря)
+        var forbidden = new List<Vector2>();
+        foreach (var c in world.Cities) forbidden.Add(c.Pos);
+        foreach (var k in world.Camps) forbidden.Add(k.Pos);
+
+        // Берём направление от столицы, но валидируем в цикле
+        for (int tries = 0; tries < 200; tries++)
+        {
+            float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
+            Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+            Vector2 p = world.Capital.Pos + dir * config.playerBaseDistanceFromCapital;
+
+            // Зажимаем внутрь игровой зоны (с небольшим запасом)
+            p = ClampToPlayable(p, half, 30f);
+
+            // Далеко от городов/лагерей
+            bool ok = true;
+            for (int i = 0; i < forbidden.Count; i++)
+            {
+                if ((p - forbidden[i]).sqrMagnitude < clear2) { ok = false; break; }
+            }
+
+            if (!ok) continue;
+
+            // В буфер по краю не вываливаемся
+            if (!world.IsInsidePlayable(p, 10f)) continue;
+
+            return p;
+        }
+
+        // fallback — центр
+        return Vector2.zero;
+    }
+
+    private static Vector2 ClampToPlayable(Vector2 p, float playableHalf, float pad = 0f)
+    {
+        float h = Mathf.Max(0f, playableHalf - pad);
+        return new Vector2(Mathf.Clamp(p.x, -h, h), Mathf.Clamp(p.y, -h, h));
     }
 
     private static Vector2 ClampToMap(Vector2 p, float half)
@@ -487,7 +544,7 @@ public class MapGenerator : MonoBehaviour
         return new Rect(seedPos.x - s * 0.5f, seedPos.y - s * 0.5f, s, s);
     }
 
-    // -------------------- Построение дорог: синхронные и общие утилиты --------------------
+    // -------------------- Дороги: утилиты --------------------
 
     private struct Edge { public int a, b; public float w; }
 
@@ -586,28 +643,7 @@ public class MapGenerator : MonoBehaviour
         return pts;
     }
 
-    /// <summary>
-    /// Синхронная сборка дорожной сети (оставлена для обратной совместимости).
-    /// </summary>
-    private void BuildRoads()
-    {
-        var nodes = new List<NodeData>(); nodes.Add(world.Capital); nodes.AddRange(world.Cities);
-
-        int k = Mathf.Max(2, config.roadKNearest);
-        var candidateEdges = KNearestEdges(nodes, k);
-
-        var mst = BuildMST(nodes.Count, candidateEdges);
-        foreach (var e in mst) AddRoadEdge(nodes[e.a], nodes[e.b]);
-
-        // Доп соединения
-        for (int i = 0; i < config.extraConnections; i++)
-        {
-            var extra = PickExtraEdge(nodes, mst, candidateEdges);
-            if (extra.a >= 0) AddRoadEdge(nodes[extra.a], nodes[extra.b]);
-        }
-    }
-
-    // -------------------- Быстрая перезагрузка только врагов (как было) --------------------
+    // -------------------- Быстрая перезагрузка только врагов --------------------
 
     public void RespawnEnemiesOnly()
     {
@@ -623,7 +659,7 @@ public class MapGenerator : MonoBehaviour
             return EnemyPersonality.Aggressive;
         };
 
-        // --- Гарнизоны городов ---
+        // гарнизоны городов
         foreach (var city in ws.Cities)
         {
             if (city.Garrison <= 0) continue;
@@ -658,11 +694,8 @@ public class MapGenerator : MonoBehaviour
                 }
 
                 var sq = new SquadData($"g_{city.Id}_{k}", basePos, city.RegionId, 1);
-                sq.IsGarrison = true;
-                sq.AnchorNodeId = city.Id;
-                sq.Persona = EnemyPersonality.Neutral;
-                sq.Callsign = call;
-                sq.Firepower = 1.0f;
+                sq.IsGarrison = true; sq.AnchorNodeId = city.Id; sq.Persona = EnemyPersonality.Neutral;
+                sq.Callsign = call; sq.Firepower = 1.0f;
                 sq.Speed = Mathf.Lerp(config.enemySpeedRange.x, config.enemySpeedRange.y, (float)rng.NextDouble());
                 sq.DetectionRadius = config.enemyDetectionRadius;
 
@@ -671,7 +704,7 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
-        // --- Гарнизоны лагерей ---
+        // гарнизоны лагерей
         foreach (var camp in ws.Camps)
         {
             if (camp.Garrison <= 0) continue;
@@ -706,11 +739,8 @@ public class MapGenerator : MonoBehaviour
                 }
 
                 var sq = new SquadData($"g_{camp.Id}_{k}", basePos, camp.RegionId, 1);
-                sq.IsGarrison = true;
-                sq.AnchorNodeId = camp.Id;
-                sq.Persona = EnemyPersonality.Neutral;
-                sq.Callsign = call;
-                sq.Firepower = 1.0f;
+                sq.IsGarrison = true; sq.AnchorNodeId = camp.Id; sq.Persona = EnemyPersonality.Neutral;
+                sq.Callsign = call; sq.Firepower = 1.0f;
                 sq.Speed = Mathf.Lerp(config.enemySpeedRange.x, config.enemySpeedRange.y, (float)rng.NextDouble());
                 sq.DetectionRadius = config.enemyDetectionRadius;
 
@@ -719,7 +749,7 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
-        // --- Мобильные ---
+        // мобильные
         for (int m = 0; m < config.enemySquads; m++)
         {
             bool fromCity = rng.Next(100) < 70 || ws.Camps.Count == 0 || ws.Cities.Count == 0;
@@ -729,15 +759,29 @@ public class MapGenerator : MonoBehaviour
 
             Vector2 pos = src.Pos + Random.insideUnitCircle * 50f;
 
+            if (config.enemyMinDistanceFromPlayer > 0f)
+            {
+                int guard = 0;
+                while ((pos - ws.PlayerSpawn).sqrMagnitude < config.enemyMinDistanceFromPlayer * config.enemyMinDistanceFromPlayer
+                       && guard++ < 32)
+                {
+                    pos = src.Pos + Random.insideUnitCircle * 80f;
+                }
+            }
+            int clipGuard = 0;
+            while (!world.IsInsidePlayable(pos) && clipGuard++ < 16)
+            {
+                pos = Vector2.Lerp(src.Pos, ws.PlayerSpawn, (float)rng.NextDouble());
+            }
+
             var sq = new SquadData($"squad_{m}", pos, src.RegionId, 1);
-            sq.Persona = PickPersona();
+            var pers = PickPersona();
+            sq.Persona = pers;
+            sq.Callsign = (callsigns != null) ? callsigns.TakeUnique(rng, usedCallsigns) : $"Враг-{rng.Next(100, 999)}";
+            usedCallsigns.Add(sq.Callsign);
 
-            if (callsigns != null) sq.Callsign = callsigns.TakeUnique(rng, usedCallsigns);
-            else { string tmp = $"Враг-{rng.Next(100, 999)}"; usedCallsigns.Add(tmp); sq.Callsign = tmp; }
-
-            sq.Firepower = (sq.Persona == EnemyPersonality.Cowardly) ? 0.8f :
-                           (sq.Persona == EnemyPersonality.Aggressive) ? 1.2f : 1.0f;
-
+            sq.Firepower = (pers == EnemyPersonality.Cowardly) ? 0.8f :
+                           (pers == EnemyPersonality.Aggressive) ? 1.2f : 1.0f;
             sq.Speed = Mathf.Lerp(config.enemySpeedRange.x, config.enemySpeedRange.y, (float)rng.NextDouble());
             sq.DetectionRadius = config.enemyDetectionRadius;
 

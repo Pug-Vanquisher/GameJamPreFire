@@ -12,7 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb1f5d621d4ddc24991974c9aa7101aa, type: 3}
   m_Name: MapConfig
   m_EditorClassIdentifier: 
-  mapHalfSize: 8000
+  mapHalfSize: 9500
+  edgeBufferWidth: 1000
+  spawnOffsetFromBuffer: 150
   regionSeeds: 15
   regionSeedMinSpacing: 2000
   regionSafeMargin: 600
@@ -24,10 +26,12 @@ MonoBehaviour:
   biomeProbeRadius: 120
   citiesCount: 14
   campsCount: 8
-  minNodeSpacing: 2400
-  capitalSafeRadius: 1400
+  minNodeSpacing: 2800
+  capitalSafeRadius: 1300
   playerBaseDistanceFromCapital: 5000
-  enemySquads: 16
+  playerSpawnClearRadius: 1500
+  enemyMinDistanceFromPlayer: 2000
+  enemySquads: 18
   cityGarrisonRange: {x: 3, y: 5}
   campGarrisonRange: {x: 1, y: 3}
   garrisonSpawnRadius: 180

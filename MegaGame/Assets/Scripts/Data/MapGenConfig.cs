@@ -1,3 +1,4 @@
+// MapGenConfig.cs — добавьте/оставьте только нужные поля
 using UnityEngine;
 
 [CreateAssetMenu(menuName = "World/Map Gen Config")]
@@ -5,6 +6,10 @@ public class MapGenConfig : ScriptableObject
 {
     [Header("Размеры мира (в юнитах)")]
     public float mapHalfSize = 8000f;
+
+    [Header("Буфер по краю карты (ничего не спавнится)")]
+    public float edgeBufferWidth = 400f;            // ширина глушилки по всему периметру
+    public float spawnOffsetFromBuffer = 60f;       // дополнительный отступ внутрь от буфера (чтоб не на самом краю)
 
     [Header("Регионы (Вороной)")]
     public int regionSeeds = 28;
@@ -27,21 +32,23 @@ public class MapGenConfig : ScriptableObject
     public float minNodeSpacing = 650f;
     public float capitalSafeRadius = 1400f;
 
-    [Header("База игрока / спавн")]
+    [Header("База/спавн игрока и безопасные расстояния")]
     public float playerBaseDistanceFromCapital = 1100f;
+    public float playerSpawnClearRadius = 900f;     // от игрока должно быть чисто: нет городов/лагерей/моб.врагов
+    public float enemyMinDistanceFromPlayer = 800f; // моб. отрядам запрещено спавниться ближе этого радиуса
 
     [Header("Враги (мобильные)")]
-    public int enemySquads = 6;                 // количество мобильных отрядов
+    public int enemySquads = 6;
 
     [Header("Гарнизоны узлов")]
-    public Vector2Int cityGarrisonRange = new Vector2Int(2, 5);  // отрядов-гарнизонников на город
-    public Vector2Int campGarrisonRange = new Vector2Int(0, 3);  // отрядов-гарнизонников на лагерь
-    public float garrisonSpawnRadius = 120f;                      // радиус кольца вокруг узла
-    public float garrisonMinSeparation = 35f;                     // минимальная дистанция между отрядами гарнизона
+    public Vector2Int cityGarrisonRange = new Vector2Int(2, 5);
+    public Vector2Int campGarrisonRange = new Vector2Int(0, 3);
+    public float garrisonSpawnRadius = 120f;
+    public float garrisonMinSeparation = 35f;
 
     [Header("Баланс врагов")]
-    public float enemyDetectionRadius = 1500f;   // радиус обнаружения/вступления в бой
-    public Vector2 enemySpeedRange = new Vector2(220f, 280f); // мин/макс скорость отрядов
+    public float enemyDetectionRadius = 1500f;
+    public Vector2 enemySpeedRange = new Vector2(220f, 280f);
 
     [Header("Дороги")]
     public int roadKNearest = 3;

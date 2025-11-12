@@ -10,6 +10,10 @@ public class WorldState : MonoBehaviour
     public class RegionSeed { public int Id; public Vector2 Pos; }
     public List<RegionSeed> Regions = new();
 
+    public float PlayableHalfSize { get; private set; }   // половина стороны квадрата, где можно спавниться
+    public float EdgeBufferWidth { get; private set; }    // ширина буфера по периметру
+    public Rect PlayableRect { get; private set; }       // прямоугольник игровой зоны
+
     public void ResetNodesToStart()
     {
         if (Capital != null) Capital.ResetToStart();
@@ -21,6 +25,19 @@ public class WorldState : MonoBehaviour
     public void ClearEnemies()
     {
         EnemySquads.Clear();
+    }
+    public void SetPlayableZone(float half, float edgeBufferWidth, float spawnOffsetFromBuffer)
+    {
+        EdgeBufferWidth = Mathf.Max(0f, edgeBufferWidth);
+        float innerOffset = Mathf.Max(0f, spawnOffsetFromBuffer);
+        PlayableHalfSize = Mathf.Max(0f, half - EdgeBufferWidth - innerOffset);
+        PlayableRect = new Rect(-PlayableHalfSize, -PlayableHalfSize, PlayableHalfSize * 2f, PlayableHalfSize * 2f);
+    }
+
+    public bool IsInsidePlayable(Vector2 p, float pad = 0f)
+    {
+        return p.x >= PlayableRect.xMin + pad && p.x <= PlayableRect.xMax - pad
+            && p.y >= PlayableRect.yMin + pad && p.y <= PlayableRect.yMax - pad;
     }
 
     public int GetRegionId(Vector2 p, out float d1, out float d2)

@@ -293,7 +293,6 @@ MonoBehaviour:
   fadeMin: 0.5
   fadeMax: 1
   fadeSpeed: 1.6
-  ignoreTimeScale: 1
   progressGroup: {fileID: 791203679}
   progressFill: {fileID: 454655916}
   progressLabel: {fileID: 910608887}
@@ -301,6 +300,7 @@ MonoBehaviour:
   pressAnyKeyText: {fileID: 2140758694}
   pressPulseScale: 1.06
   pressPulseTime: 0.7
+  hideMainSceneDuringPrep: 1
 --- !u!114 &216559430
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -498,7 +498,7 @@ MonoBehaviour:
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 0
-  m_FillAmount: 1
+  m_FillAmount: 0
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
@@ -836,7 +836,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 100%
+  m_text: 0%
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 7ab4956497ca9a048be43f9676319c11, type: 2}
   m_sharedMaterial: {fileID: 1535518185155482596, guid: 7ab4956497ca9a048be43f9676319c11, type: 2}

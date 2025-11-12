@@ -3,77 +3,58 @@ using Events;
 
 public class MenuScript : MonoBehaviour
 {
-    public enum Menu
-    {
-        None = -1,
-        Pause,
-        Tutorial,
-        Settings,
-        Win,
-        Defeat
-    }
+    public enum Menu { None = -1, Pause, Tutorial, Settings, Win, Defeat }
 
     [SerializeField] private GameObject[] window;
     [SerializeField] private GameObject image;
     [SerializeField] private GameRunManager gamemanager;
+
     private Menu currentMenu;
-    private bool DeadInside;
 
+    void OnEnable() => EventBus.Subscribe<PlayerDied>(Defeat);
+    void OnDisable() => EventBus.Unsubscribe<PlayerDied>(Defeat);
 
-    void Start()
-    {
-        EventBus.Subscribe<PlayerDied>(Defeat);
-    }
-
-    // Update is called once per frame
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.Escape))
-        {
             Pause(currentMenu == Menu.None);
-        }
 
         bool showImage = false;
-        for(int i = 0; i < window.Length; i++)
+        for (int i = 0; i < window.Length; i++)
         {
-            window[i].SetActive(i == (int)currentMenu && currentMenu != Menu.None);
-            if (i == (int)currentMenu && currentMenu != Menu.None) { showImage = true; }
+            bool active = (i == (int)currentMenu && currentMenu != Menu.None);
+            window[i].SetActive(active);
+            if (active) showImage = true;
         }
-        image.SetActive(showImage);
+        if (image) image.SetActive(showImage);
     }
 
     public void Pause(bool isPaused)
     {
-        Time.timeScale = (isPaused) ? 0 : 1;
-        currentMenu = (isPaused)? Menu.Pause : Menu.None;
+        Time.timeScale = isPaused ? 0 : 1;
+        currentMenu = isPaused ? Menu.Pause : Menu.None;
     }
 
-    public void OpenMenu(int menu)
-    {
-        currentMenu = (Menu)menu;
-    }
+    public void OpenMenu(int menu) => currentMenu = (Menu)menu;
 
     public void Restart(string variant)
     {
-        if (variant == "new") { gamemanager.RestartNewMap(); }
-        if (variant == "same") { gamemanager.RestartSameMap(); }
+        if (variant == "new") gamemanager.RestartNewMap();
+        if (variant == "same") gamemanager.RestartSameMap();
         Pause(false);
     }
 
-    public void Win()
-    {
-        currentMenu = Menu.Win;
-    }
+    public void Win() => currentMenu = Menu.Win;
 
     public void Defeat(PlayerDied died)
     {
         Pause(true);
         currentMenu = Menu.Defeat;
     }
+
     public void Exit()
     {
         Debug.Log("Quit");
         Application.Quit();
     }
-
 }
