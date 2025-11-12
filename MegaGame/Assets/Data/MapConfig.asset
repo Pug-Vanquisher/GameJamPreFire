@@ -30,7 +30,7 @@ MonoBehaviour:
   enemySquads: 16
   cityGarrisonRange: {x: 3, y: 5}
   campGarrisonRange: {x: 1, y: 3}
-  garrisonSpawnRadius: 100
+  garrisonSpawnRadius: 180
   garrisonMinSeparation: 35
   enemyDetectionRadius: 700
   enemySpeedRange: {x: 150, y: 175}
@@ -41,6 +41,6 @@ MonoBehaviour:
   roadFrequency: 1.75
   seed: 12345
   useSystemTimeSeed: 1
-  fuelRange: {x: 5, y: 20}
-  medsRange: {x: 0, y: 8}
-  ammoRange: {x: 0, y: 12}
+  fuelRange: {x: 10, y: 25}
+  medsRange: {x: 0, y: 50}
+  ammoRange: {x: 0, y: 50}

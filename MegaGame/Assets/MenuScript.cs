@@ -17,6 +17,7 @@ public class MenuScript : MonoBehaviour
     [SerializeField] private GameObject image;
     [SerializeField] private GameRunManager gamemanager;
     private Menu currentMenu;
+    private bool DeadInside;
 
 
     void Start()
