@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Events;
 using DG.Tweening;
 using TMPro;
+using System.Collections;
 
 public class InterfaceController : MonoBehaviour
 {
@@ -16,8 +17,13 @@ public class InterfaceController : MonoBehaviour
     [SerializeField] private MeshRenderer actionMesh;
     [SerializeField] private MeshRenderer radarMesh;
 
+    [SerializeField] private GameObject lever;
     [SerializeField] private GameObject[] buttons;
-    [SerializeField] private Camera targetCamera; 
+    [SerializeField] private Camera targetCamera;
+
+    private Vector3 nextLeverPosition = Vector3.zero;
+    private Vector3 currentLeverPosition = Vector3.zero;
+    private bool is_leverMoving = false;
 
     [Header("Buttons FX")]
     [SerializeField] private float buttonStroke = 0.01f;
@@ -116,6 +122,7 @@ public class InterfaceController : MonoBehaviour
 
         CameraTrackMouse();
         HandleMouse();
+        HandleLever();
 
         for (int i = 0; i < buttons.Length; i++)
             HandleButtonClick(i);
@@ -219,6 +226,18 @@ public class InterfaceController : MonoBehaviour
         float scale = 1f;
         TriggerShake(onHit, scale);
     }
+    private void HandleLever()
+    {
+        Vector3 vector = Vector3.zero;
+        if (Input.GetKey(KeyCode.W)) vector.x = 1;
+        if (Input.GetKey(KeyCode.A)) vector.z = 1;
+        if (Input.GetKey(KeyCode.S)) vector.x = -1;
+        if (Input.GetKey(KeyCode.D)) vector.z = -1;
+
+        vector *= 5;
+
+        lever.transform.rotation = Quaternion.Lerp(lever.transform.rotation, Quaternion.Euler(vector.x - 25, 85, vector.z), Time.deltaTime*10f);
+    }
 
     // private void OnPlayerFiredShake(PlayerFired _)
     // {
@@ -273,6 +292,7 @@ public class InterfaceController : MonoBehaviour
         radarMultTween?.Kill();
         actionMultTween?.Kill();
     }
+
 
     private float GetMult(MeshRenderer mr, float fallback)
     {
