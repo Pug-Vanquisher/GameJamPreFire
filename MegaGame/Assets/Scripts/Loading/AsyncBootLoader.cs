@@ -37,7 +37,7 @@ public class AsyncBootLoader : MonoBehaviour
 
     void Start()
     {
-        bootScene = gameObject.scene; // запомним свою сцену
+        bootScene = gameObject.scene; 
 
         if (progressGroup) progressGroup.SetActive(true);
         if (pressAnyKeyGroup) pressAnyKeyGroup.SetActive(false);
@@ -58,7 +58,6 @@ public class AsyncBootLoader : MonoBehaviour
 
     IEnumerator BootFlow()
     {
-        // 1) Грузим основную сцену ADDITIVE
         var op = SceneManager.LoadSceneAsync(mainSceneName, LoadSceneMode.Additive);
         while (!op.isDone) yield return null;
 
@@ -69,11 +68,10 @@ public class AsyncBootLoader : MonoBehaviour
             yield break;
         }
 
-        // 2) Найдём нужные объекты в основной сцене
         MapGenerator gen = null;
         WorldMapRenderer wm = null;
         GameRunManager grm = null;
-        WorldState ws = WorldState.Instance; // он DontDestroyOnLoad — может уже существовать
+        WorldState ws = WorldState.Instance;
 
         foreach (var root in mainScene.GetRootGameObjects())
         {
@@ -85,7 +83,6 @@ public class AsyncBootLoader : MonoBehaviour
         if (!gen) Debug.LogError("[Boot] MapGenerator not found in main scene");
         if (!wm) Debug.LogError("[Boot] WorldMapRenderer not found in main scene");
 
-        // 3) При необходимости — скрыть всю основную сцену, оставить только нужных
         GameObject genRoot = gen ? gen.transform.root.gameObject : null;
         GameObject wmRoot = wm ? wm.transform.root.gameObject : null;
         GameObject grmRoot = grm ? grm.transform.root.gameObject : null;
@@ -96,7 +93,6 @@ public class AsyncBootLoader : MonoBehaviour
             if (genRoot) keep.Add(genRoot);
             if (wmRoot) keep.Add(wmRoot);
             if (grmRoot) keep.Add(grmRoot);
-            // WorldState висит в DontDestroyOnLoad — на корни основной сцены не влияет
 
             foreach (var root in mainScene.GetRootGameObjects())
             {
@@ -109,11 +105,10 @@ public class AsyncBootLoader : MonoBehaviour
             }
         }
 
-        // На всякий случай остановим автокорутины, если кто-то успел стартануть сам
         if (gen) gen.StopAllCoroutines();
         if (wm) wm.StopAllCoroutines();
 
-        // 4) Асинхронно готовим мир + выпекаем карту
+        // Асинхронно готовим мир
         float stageWeightGen = 0.65f;
         float stageWeightBake = 0.35f;
         Action<float> setGenProg = t => UpdateProgress(stageWeightGen * Mathf.Clamp01(t));
@@ -122,7 +117,6 @@ public class AsyncBootLoader : MonoBehaviour
         if (gen) yield return StartCoroutine(gen.GenerateAsync(setGenProg));
         if (wm) yield return StartCoroutine(wm.BakeAsync(setBakeProg));
 
-        // 5) Готово — «нажмите любую кнопку»
         if (progressGroup) progressGroup.SetActive(false);
         if (pressAnyKeyGroup) pressAnyKeyGroup.SetActive(true);
 
@@ -136,18 +130,14 @@ public class AsyncBootLoader : MonoBehaviour
 
         yield return new WaitUntil(() => Input.anyKeyDown);
 
-        // 6) Реактивируем корни основной сцены
         foreach (var go in deactivatedRoots) if (go) go.SetActive(true);
         deactivatedRoots.Clear();
 
-        // 7) Делаем основную сцену активной
         SceneManager.SetActiveScene(mainScene);
 
-        // 8) Ставим игру на паузу на старте (меню открыто)
         var menu = FindObjectOfType<MenuScript>(true);
         if (menu) menu.Pause(true);
 
-        // 9) Выгружаем загрузочную сцену (ИМЕННО bootScene!)
         SceneManager.UnloadSceneAsync(bootScene);
     }
 

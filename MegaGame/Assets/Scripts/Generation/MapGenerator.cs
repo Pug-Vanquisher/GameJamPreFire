@@ -36,22 +36,20 @@ public class MapGenerator : MonoBehaviour
 
         float Report(float a) { onProgress?.Invoke(a); return a; }
 
-        // --- общий сид и привязка биомов к нему ---
         int seed = config.useSystemTimeSeed ? System.Environment.TickCount : config.seed;
         rng = new System.Random(seed);
 
-        // --- мир/стейт ---
         world = WorldState.Instance ?? new GameObject("[WorldState]").AddComponent<WorldState>();
         world.Cities.Clear(); world.Camps.Clear(); world.EnemySquads.Clear(); world.Roads.Clear(); world.Regions.Clear();
 
-        int biomeSeed = unchecked((int)(seed ^ 0x9E3779B9)); // производное от общего сида (детерминированно от seed)
+        int biomeSeed = unchecked((int)(seed ^ 0x9E3779B9)); 
         world.InitGlobals(
             config.mapHalfSize,
             biomes,
             config.biomeFrequency, config.biomeFrequency2,
             config.biomeBlend,
             biomeSeed
-        ); // биом-оффсеты и пр. (как было) :contentReference[oaicite:3]{index=3}
+        ); 
 
         // --- игровая зона (mapHalfSize - edgeBuffer - offset) ---
         world.SetPlayableZone(config.mapHalfSize, config.edgeBufferWidth, config.spawnOffsetFromBuffer);
@@ -59,11 +57,9 @@ public class MapGenerator : MonoBehaviour
         Report(0.03f);
         yield return null;
 
-        // --- регионы (семена Вороного) ---
         var used = new List<Vector2>();
         for (int i = 0; i < config.regionSeeds; i++)
         {
-            // Семена регионов можно кидать по всей карте — это топология, не «объекты».
             Vector2 p = SamplePosUnique(used, config.regionSeedMinSpacing, config.mapHalfSize);
             world.Regions.Add(new WorldState.RegionSeed { Id = i, Pos = p });
             used.Add(p);
@@ -75,7 +71,6 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
-        // Быстрый алерт регионов на дебаг-рендер
         for (int i = 0; i < world.Regions.Count; i++)
             EventBus.Publish(new RegionCreated(i, RegionRectApprox(world.Regions[i].Pos)));
 
@@ -157,7 +152,7 @@ public class MapGenerator : MonoBehaviour
         Report(0.75f);
         yield return null;
 
-        // --- база/спавн игрока (внутри playable и далеко от узлов) ---
+        // --- база/спавн игрока
         {
             Vector2 basePos = PickPlayerBasePosSafe();
             var baseNode = new NodeData("player_base", "База", NodeType.Base, Faction.Player,
@@ -169,7 +164,7 @@ public class MapGenerator : MonoBehaviour
         Report(0.78f);
         yield return null;
 
-        // --- враги (гарнизоны + мобильные) ---
+        // --- враги ---
         yield return StartCoroutine(GenerateEnemiesAsync(0.78f, 0.92f, onProgress));
 
         // --- дороги ---
@@ -200,7 +195,6 @@ public class MapGenerator : MonoBehaviour
             return EnemyPersonality.Aggressive;
         }
 
-        // Прогресс — прикидываем объём
         int total = 0;
         foreach (var c in ws.Cities) total += Mathf.Max(0, c.Garrison);
         foreach (var k in ws.Camps) total += Mathf.Max(0, k.Garrison);

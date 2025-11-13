@@ -5,26 +5,19 @@ using UnityEngine.UI;
 using TMPro;
 using Events;
 
-/// <summary>
-/// Асинхронный рендер мировой карты в Texture2D:
-/// - заливает биомы сплошными цветами (без декоративных деталей);
-/// - по желанию дорисовывает штриховку/границы регионов;
-/// - поверх выкладывает дороги + статические маркеры (столица/города/база/лагеря[debug]);
-/// - динамически обновляет маркеры врагов (только мобильных, по debug-флагу).
-/// </summary>
 public class WorldMapRenderer : MonoBehaviour
 {
     [Header("UI")]
     [SerializeField] private RawImage mapImage;
-    [SerializeField] private RectTransform overlay;     // слой для UI-иконок поверх карты
-    [SerializeField] private Image playerMarker;        // маркер игрока (UI-иконка)
+    [SerializeField] private RectTransform overlay;    
+    [SerializeField] private Image playerMarker;       
 
     [Header("Prefabs")]
-    [SerializeField] private Image baseIconPrefab;      // у префаба можно добавить TMP подпись в детях
-    [SerializeField] private Image cityIconPrefab;      // у префаба сверху — TMP_Text (название)
-    [SerializeField] private Image capitalIconPrefab;   // у префаба сверху — TMP_Text (название)
-    [SerializeField] private Image campIconPrefab;      // для отладки лагерей на мировой карте
-    [SerializeField] private Image enemyIconPrefab;     // маленькая точка для врагов (debug)
+    [SerializeField] private Image baseIconPrefab;    
+    [SerializeField] private Image cityIconPrefab;     
+    [SerializeField] private Image capitalIconPrefab;   
+    [SerializeField] private Image campIconPrefab;      
+    [SerializeField] private Image enemyIconPrefab;     
 
     [Header("Icon variants (random pick)")]
     [SerializeField] private List<Sprite> citySpriteVariants = new();
@@ -70,8 +63,8 @@ public class WorldMapRenderer : MonoBehaviour
     private Coroutine bakeRoutine;
 
     // пулы UI-иконок
-    readonly List<Image> overlayStatic = new();   // столица/города/база/лагеря (префабы с TMP)
-    readonly List<Image> overlayDynamic = new();  // мобильные враги (простые Image)
+    readonly List<Image> overlayStatic = new();  
+    readonly List<Image> overlayDynamic = new();  
     int overlayStaticIdx, overlayDynamicIdx;
 
     // ---------- Lifecycle / Events ----------
@@ -102,11 +95,10 @@ public class WorldMapRenderer : MonoBehaviour
         if (autoBakeOnStart)
             RestartBake(null);
         else
-            UpdatePlayerMarker(); // чтобы маркер не зависал в (0,0), если карту печёт Boot
+            UpdatePlayerMarker();
     }
 
     // ---------- Public API for Boot scene ----------
-    /// <summary> Запустить асинхронную выпечку карты (для загрузочного экрана). </summary>
     public IEnumerator BakeAsync(System.Action<float> onProgress)
     {
         if (bakeRoutine != null) StopCoroutine(bakeRoutine);
@@ -120,12 +112,10 @@ public class WorldMapRenderer : MonoBehaviour
     }
     void OnRoadBuilt(RoadBuilt _)
     {
-        // дороги рисуются внутри BakeAll, но если пришли новые после — можно дорисовать быстро:
         RedrawRoadsAndNodesOnly();
     }
     void OnNodeSpawned(NodeSpawned _)
     {
-        // свежие узлы появятся в статическом оверлее
         RedrawStaticOverlayOnly();
     }
     void OnPlayerMoved(PlayerMoved _) => UpdatePlayerMarker();
@@ -133,7 +123,6 @@ public class WorldMapRenderer : MonoBehaviour
     void OnSquadDied(SquadDied _) => UpdateEnemiesOverlay();
     void OnSquadMoved(SquadMoved e) { if (!e.IsGarrison) UpdateEnemiesOverlay(); }
 
-    // ---------- Bake orchestration ----------
     void RestartBake(System.Action<float> onProgress)
     {
         if (!gameObject.activeInHierarchy) return;
@@ -148,10 +137,8 @@ public class WorldMapRenderer : MonoBehaviour
 
         EnsureTexture();
 
-        // фаза 1 — заливаем биомы
         yield return StartCoroutine(BakeBiomesCoroutine(onProgress, 0.00f, 0.80f));
 
-        // фаза 2 — региональные оверлеи (опционально)
         if (drawRegionHatch)
         {
             yield return StartCoroutine(DrawRegionHatchCoroutine(onProgress, 0.80f, 0.88f));
@@ -161,10 +148,8 @@ public class WorldMapRenderer : MonoBehaviour
             yield return StartCoroutine(DrawRegionBordersCoroutine(onProgress, 0.88f, 0.92f));
         }
 
-        // фаза 3 — дороги (поштучно, чтобы не фризить кадр)
         yield return StartCoroutine(DrawRoadsCoroutine(onProgress, 0.92f, 0.98f));
 
-        // финал — статический оверлей (иконки) + враги
         RebuildStaticOverlay();
         UpdateEnemiesOverlay();
         tex.Apply(false, false);
@@ -334,7 +319,6 @@ public class WorldMapRenderer : MonoBehaviour
                 DrawNode(c.Pos, cityFallbackDot, nodeRadiusPx);
         }
 
-        // лагеря — только при debug
         if (debugRender)
         {
             foreach (var k in ws.Camps)
@@ -351,14 +335,12 @@ public class WorldMapRenderer : MonoBehaviour
 
     void RedrawStaticOverlayOnly()
     {
-        // перерисовываем только статические иконки (без повторной выпечки текстуры)
         RebuildStaticOverlay();
         UpdatePlayerMarker();
     }
 
     void RedrawRoadsAndNodesOnly()
     {
-        // быстрый догон: перерисовать только дороги поверх уже выпеченных биомов
         var ws = WorldState.Instance; if (!ws) return;
         foreach (var r in ws.Roads) DrawPolyline(r.Path, roadColor, roadWidthPx);
         tex.Apply(false, false);

@@ -76,7 +76,6 @@ public class CommandConsoleUI : MonoBehaviour
         externalLockActive = e.Active;
         if (externalLockActive)
         {
-            // мгновенно сообщим игроку
             EventBus.Publish(new ConsoleMessage(ConsoleSender.Robot,
                 "Командная консоль заблокирована: выполняется протокол самоуничтожения."));
         }

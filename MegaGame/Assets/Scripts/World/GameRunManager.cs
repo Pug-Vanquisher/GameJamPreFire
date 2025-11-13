@@ -91,7 +91,7 @@ public class GameRunManager : MonoBehaviour
     // рестарт с новой картой
     public void RestartNewMap()
     {
-        if (mapGen != null) mapGen.GenerateNow(); // сгенерит карту и вызовет MapGenerated (но мы уже initialObjectivesAssigned=true)
+        if (mapGen != null) mapGen.GenerateNow();
         SetupObjectives();
         AnnounceObjectives();
         InitPlayer(reuseMap: false);
@@ -105,8 +105,6 @@ public class GameRunManager : MonoBehaviour
         var ws = WorldState.Instance;
         if (ws != null) EventBus.Publish(new PlayerMoved(ws.PlayerSpawn));
 
-        // Событие оставляем для внутренних подписчиков (обновить UI, меню и т.п.),
-        // но НИЧЕГО не логируем «Новый забег начался».
         EventBus.Publish(new RunStarted(reuseMap));
     }
 

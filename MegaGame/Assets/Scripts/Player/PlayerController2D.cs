@@ -25,11 +25,8 @@ public class PlayerController2D : MonoBehaviour
     [SerializeField] private float moveThreshold = 0.1f;
 
     [Header("Self-Destruct Outside Playable Zone")]
-    [Tooltip("Задержка до самоуничтожения, когда игрок вне игровой зоны")]
     [SerializeField] private float selfDestructDelay = 10f;
-    [Tooltip("Звук запуска самоуничтожения (индекс в SoundManager)")]
     [SerializeField] private int selfDestructStartSound = 7;
-    [Tooltip("Заголовок строки прогресса самоуничтожения")]
     [SerializeField] private string selfDestructTitle = "Вы покидаете боевую зону — немедленно возвращайтесь.";
 
     private bool wasMoving;
@@ -83,17 +80,13 @@ public class PlayerController2D : MonoBehaviour
     {
         var ws = WorldState.Instance;
 
-        // 1) Тихо гасим возможное самоуничтожение с прошлого рана (без логов).
         CancelSelfDestruct(silent: true);
 
-        // 2) Обновляем параметры расхода топлива.
         PlayerInventory.ConfigureFuelConsumption(fuelPerUnit);
 
-        // 3) Возвращаем игрока на точку спавна текущего забега.
         if (ws != null && ws.PlayerBase != null)
             SnapTo(ws.PlayerSpawn);
 
-        // 4) После снапа гарантированно снимаем блокировку консоли (без доп. сообщений).
         if (ws != null && ws.IsInsidePlayable(PlayerState.Pos))
             EventBus.Publish(new SelfDestructLockChanged(false));
     }
@@ -110,7 +103,6 @@ public class PlayerController2D : MonoBehaviour
         var ws = WorldState.Instance;
         if (!ws) return;
 
-        // ===== ограничение карты + самоуничтожение =====
         bool inside = ws.IsInsidePlayable(PlayerState.Pos);
         if (!inside && selfDestructCo == null)
         {
@@ -118,11 +110,9 @@ public class PlayerController2D : MonoBehaviour
         }
         else if (inside && selfDestructCo != null)
         {
-            // вернулись внутрь — отменяем с сообщением
             CancelSelfDestruct(silent: false);
         }
 
-        // ===== если топлива нет — не двигаемся, один раз шлём событие =====
         if (PlayerInventory.Fuel <= 0f)
         {
             StopStepLoop();
@@ -130,7 +120,7 @@ public class PlayerController2D : MonoBehaviour
             {
                 outOfFuelRaised = true;
                 EventBus.Publish(new PlayerOutOfFuel());
-                SoundManager.Instance.PlaySound(2); // короткий «тык»
+                SoundManager.Instance.PlaySound(2); 
             }
             return;
         }
@@ -139,9 +129,8 @@ public class PlayerController2D : MonoBehaviour
             outOfFuelRaised = false;
         }
 
-        // ===== управление WASD/стрелки =====
-        float h = Input.GetAxisRaw("Horizontal");   // A/D, Left/Right
-        float v = Input.GetAxisRaw("Vertical");     // W/S, Up/Down
+        float h = Input.GetAxisRaw("Horizontal");   
+        float v = Input.GetAxisRaw("Vertical");     
         Vector2 dir = new Vector2(h, v);
         if (dir.sqrMagnitude > 1f) dir.Normalize();
 
@@ -160,7 +149,6 @@ public class PlayerController2D : MonoBehaviour
         Vector2 delta = dir * (PlayerState.Speed * Time.deltaTime);
         float dist = delta.magnitude;
 
-        // расход топлива пропорционален пройденной дистанции
         PlayerInventory.ConsumeFuelByDistance(dist);
 
         float half = ws.MapHalfSize;
@@ -172,30 +160,24 @@ public class PlayerController2D : MonoBehaviour
         EventBus.Publish(new PlayerMoved(PlayerState.Pos));
     }
 
-    // === корутина самоуничтожения ===
     private System.Collections.IEnumerator SelfDestructRoutine()
     {
         selfDestructActive = true;
 
-        // 1) Блокируем консоль (консоль сама выведет, что она заблокирована).
         EventBus.Publish(new SelfDestructLockChanged(true));
 
-        // 2) Особый звук старта
         if (selfDestructStartSound >= 0) SoundManager.Instance.PlaySound(selfDestructStartSound);
 
-        // 3) Одна «команда с прогрессом» (10 сек по умолчанию) —
-        // текст строго по требованию: «Вы покидаете боевую зону — немедленно возвращайтесь.»
         float delay = Mathf.Max(0.01f, selfDestructDelay);
         EventBus.Publish(new CommandExecutionStarted(selfDestructTitle, delay));
 
         float end = Time.time + delay;
         while (Time.time < end)
         {
-            // Если вернулись, нас отменят извне через CancelSelfDestruct()
+
             yield return null;
         }
 
-        // Если корутина не была отменена — смерть
         if (selfDestructActive)
         {
             selfDestructActive = false;
@@ -218,7 +200,6 @@ public class PlayerController2D : MonoBehaviour
         {
             selfDestructActive = false;
 
-            // Закрываем прогресс-бар и разблокируем консоль.
             EventBus.Publish(new CommandExecutionFinished(selfDestructTitle, selfDestructTitle));
             EventBus.Publish(new SelfDestructLockChanged(false));
 
@@ -260,10 +241,9 @@ public class PlayerController2D : MonoBehaviour
 
 namespace Events
 {
-    /// <summary>Топливо закончилось — движение запрещено.</summary>
     public struct PlayerOutOfFuel { }
 
-    /// <summary>Включить/выключить блокировку команд консоли из-за самоуничтожения.</summary>
+ 
     public readonly struct SelfDestructLockChanged
     {
         public readonly bool Active;

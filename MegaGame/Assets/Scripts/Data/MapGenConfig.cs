@@ -1,4 +1,4 @@
-// MapGenConfig.cs — добавьте/оставьте только нужные поля
+
 using UnityEngine;
 
 [CreateAssetMenu(menuName = "World/Map Gen Config")]
@@ -8,8 +8,8 @@ public class MapGenConfig : ScriptableObject
     public float mapHalfSize = 8000f;
 
     [Header("Буфер по краю карты (ничего не спавнится)")]
-    public float edgeBufferWidth = 400f;            // ширина глушилки по всему периметру
-    public float spawnOffsetFromBuffer = 60f;       // дополнительный отступ внутрь от буфера (чтоб не на самом краю)
+    public float edgeBufferWidth = 400f;           
+    public float spawnOffsetFromBuffer = 60f;       // дополнительный отступ внутрь
 
     [Header("Регионы (Вороной)")]
     public int regionSeeds = 28;
@@ -34,8 +34,8 @@ public class MapGenConfig : ScriptableObject
 
     [Header("База/спавн игрока и безопасные расстояния")]
     public float playerBaseDistanceFromCapital = 1100f;
-    public float playerSpawnClearRadius = 900f;     // от игрока должно быть чисто: нет городов/лагерей/моб.врагов
-    public float enemyMinDistanceFromPlayer = 800f; // моб. отрядам запрещено спавниться ближе этого радиуса
+    public float playerSpawnClearRadius = 900f;     
+    public float enemyMinDistanceFromPlayer = 800f; 
 
     [Header("Враги (мобильные)")]
     public int enemySquads = 6;
