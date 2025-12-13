@@ -1441,6 +1441,22 @@ PrefabInstance:
       propertyPath: m_Name
       value: MonoBehs
       objectReference: {fileID: 0}
+    - target: {fileID: 4534591682715734781, guid: d31fb5cf9538e4e42952a30a3688c1c7, type: 3}
+      propertyPath: speed
+      value: 250
+      objectReference: {fileID: 0}
+    - target: {fileID: 4534591682715734781, guid: d31fb5cf9538e4e42952a30a3688c1c7, type: 3}
+      propertyPath: fuelPerUnit
+      value: 0.005
+      objectReference: {fileID: 0}
+    - target: {fileID: 5332482993196984788, guid: d31fb5cf9538e4e42952a30a3688c1c7, type: 3}
+      propertyPath: baseDamage.x
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5332482993196984788, guid: d31fb5cf9538e4e42952a30a3688c1c7, type: 3}
+      propertyPath: baseDamage.y
+      value: 7
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
