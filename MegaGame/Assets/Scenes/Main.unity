@@ -1451,11 +1451,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5332482993196984788, guid: d31fb5cf9538e4e42952a30a3688c1c7, type: 3}
       propertyPath: baseDamage.x
-      value: 5
+      value: 6
       objectReference: {fileID: 0}
     - target: {fileID: 5332482993196984788, guid: d31fb5cf9538e4e42952a30a3688c1c7, type: 3}
       propertyPath: baseDamage.y
-      value: 7
+      value: 8
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
