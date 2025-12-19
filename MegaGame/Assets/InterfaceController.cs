@@ -25,6 +25,9 @@ public class InterfaceController : MonoBehaviour
     private Vector3 currentLeverPosition = Vector3.zero;
     private bool is_leverMoving = false;
 
+    [Header("Book FX")]
+    [SerializeField] private float bookOpenTime = 0.75f;
+
     [Header("Buttons FX")]
     [SerializeField] private float buttonStroke = 0.01f;
     [SerializeField] private float buttonSpeed = 12f;
@@ -172,9 +175,21 @@ public class InterfaceController : MonoBehaviour
                     mouseInterracted = number;
                     console?.PressDigit(number);
                 }
-                else mouseInterracted = -1;
+                else if (hit.collider.name == "book" || hit.collider.name == "page1" || hit.collider.name == "page2")
+                {
+                    EventBus.Publish(new BookInterracted(hit.collider.name));
+                }
+                else
+                {
+                    mouseInterracted = -1;
+                    EventBus.Publish(new BookInterracted(null));
+                }
             }
-            else mouseInterracted = -1;
+            else
+            {
+                mouseInterracted = -1;
+                EventBus.Publish(new BookInterracted(null));
+            }
         }
         else
         {
@@ -322,4 +337,12 @@ public class InterfaceController : MonoBehaviour
 
     public void ShakeOnHit(float scale = 1f) => TriggerShake(onHit, Mathf.Max(0.1f, scale));
     public void ShakeOnShot(float scale = 1f) => TriggerShake(onShot, Mathf.Max(0.1f, scale));
+    public IEnumerator BookOpen()
+    {
+        float time = bookOpenTime/2;
+        float delay = time / 100;
+        for (float curTime = 0f; curTime <= time; curTime += delay) { }
+
+        yield return 0;
+    }
 }

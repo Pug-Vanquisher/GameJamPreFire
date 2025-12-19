@@ -116,4 +116,12 @@ namespace Events
             Locale = locale;
         }
     }
+    public readonly struct BookInterracted
+    {
+        public readonly string input;
+        public BookInterracted(string _input) 
+        {
+            input = _input;
+        }
+    }
 }
